@@ -2,7 +2,7 @@ name: 更新台電資料並發布網站
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # 每 10 分鐘（GitHub 排程常會延遲幾分鐘，屬正常）
+    - cron: "7,17,27,37,47,57 * * * *"   # 約每 10 分鐘；避開整點與整十分鐘，GitHub 在那些時間很忙、排程常被延遲或略過
   workflow_dispatch:          # 可以在 Actions 頁面手動按「Run workflow」
   push:
     branches: [main]          # 上傳或修改檔案後也會立刻更新一次
