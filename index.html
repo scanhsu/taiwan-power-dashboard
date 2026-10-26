@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>臺灣電力儀表板</title>
+<meta name="description" content="臺灣即時供電燈號、用電曲線、能源結構、縣市用電地圖與遊戲島嶼模式，資料來自台電今日電力資訊。">
+<meta property="og:title" content="臺灣電力儀表板">
+<meta property="og:description" content="即時供電燈號、能源結構、縣市用電地圖，還有可以看風機轉動的遊戲島嶼模式。">
+<meta name="theme-color" content="#1F4E8C">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}</style>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chiron+Hei+HK:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: 調度中心式看板 — 頂部燈號帶，下方卡片網格（手機單欄、桌機雙欄），地圖跨兩欄 */
+:root{
+  --bg:#EEF1F5; --surface:#FFFFFF; --sunk:#F5F7FA; --line:#D9DFE7; --fg:#16202C; --muted:#5A6676; --faint:#8C97A6;
+  --accent:#1F4E8C; --accent-soft:#DCE6F4;
+  --map-lo:#E9EEF4; --map-hi:#1F4E8C;
+  --ok:#2A9258; --warn:#D9A600; --alert:#E06A1F; --crit:#CC3333; --black:#2B2B2B;
+  --f-lng:#4C7DC9; --f-coal:#7D6B5C; --f-cogen:#9A88B8; --f-oil:#55555F; --f-hydro:#22898C; --f-wind:#6DBB7E; --f-solar:#E6A532; --f-other:#B3BC5E; --f-storage:#C65E86; --f-nuclear:#C2473A;
+  --font-display:"Chiron Hei HK","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  --font-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --font-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1318; --surface:#151B22; --sunk:#10151B; --line:#27303A; --fg:#E4E9EF; --muted:#9AA5B3; --faint:#6E7987;
+  --accent:#8DB2EE; --accent-soft:#1E2D44; --map-lo:#1B232D; --map-hi:#7FA8EC;
+  --ok:#45B675; --warn:#E8C23A; --alert:#F08A45; --crit:#EE5D5D; --black:#B9B9B9;
+  --f-lng:#6E9BE0; --f-coal:#A8937F; --f-cogen:#B3A3D3; --f-oil:#9898A6; --f-hydro:#3CB5B5; --f-wind:#86D396; --f-solar:#F2B94F; --f-other:#C9D274; --f-storage:#DE7BA1; --f-nuclear:#E06B5D;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1318; --surface:#151B22; --sunk:#10151B; --line:#27303A; --fg:#E4E9EF; --muted:#9AA5B3; --faint:#6E7987;
+  --accent:#8DB2EE; --accent-soft:#1E2D44; --map-lo:#1B232D; --map-hi:#7FA8EC;
+  --ok:#45B675; --warn:#E8C23A; --alert:#F08A45; --crit:#EE5D5D; --black:#B9B9B9;
+  --f-lng:#6E9BE0; --f-coal:#A8937F; --f-cogen:#B3A3D3; --f-oil:#9898A6; --f-hydro:#3CB5B5; --f-wind:#86D396; --f-solar:#F2B94F; --f-other:#C9D274; --f-storage:#DE7BA1; --f-nuclear:#E06B5D;
+  color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px;display:flex;flex-direction:column;gap:16px}
+.num{font-family:var(--font-data);font-variant-numeric:tabular-nums}
+h1,h2{font-family:var(--font-display);text-wrap:balance;margin:0;font-weight:700}
+h1{font-size:clamp(22px,4.6vw,30px);letter-spacing:.02em}
+h2{font-size:17px}
+.eyebrow{font-size:12px;letter-spacing:.12em;color:var(--muted);font-weight:500}
+.top{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:flex-end;justify-content:space-between}
+.meta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;background:var(--surface);color:var(--muted)}
+.chip.sample{border-color:color-mix(in oklab,var(--warn) 55%,var(--line));color:var(--fg)}
+.chip.sample::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.chip.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok)}
+
+/* 燈號帶 */
+.status{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,2fr);overflow:hidden}
+.light{display:flex;gap:14px;align-items:center;padding:18px;border-right:1px solid var(--line);background:color-mix(in oklab,var(--lc) 10%,var(--surface))}
+.lamp{width:54px;height:54px;border-radius:50%;flex:none;background:var(--lc);box-shadow:0 0 0 5px color-mix(in oklab,var(--lc) 22%,transparent)}
+.light b{display:block;font-family:var(--font-display);font-size:22px;line-height:1.2}
+.light small{color:var(--muted);font-size:12.5px}
+.lamps{display:flex;gap:5px;margin-top:6px}
+.lamps i{width:16px;height:6px;border-radius:3px;background:var(--c);opacity:.25}
+.lamps i.on{opacity:1}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.kpi{padding:16px 18px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi+.kpi{border-left:1px solid var(--line)}
+.kpi span{font-size:12.5px;color:var(--muted)}
+.kpi b{font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:clamp(20px,3.2vw,27px);font-weight:600;line-height:1.15}
+.kpi b em{font-style:normal;font-size:13px;color:var(--muted);font-weight:400;margin-left:3px;font-family:var(--font-body)}
+.kpi .sub{font-size:12px;color:var(--faint)}
+.meter{height:6px;border-radius:3px;background:var(--sunk);border:1px solid var(--line);overflow:hidden;margin-top:6px}
+.meter i{display:block;height:100%;background:var(--accent)}
+
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card.wide{grid-column:1/-1}
+.card header{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;justify-content:space-between}
+.card header p{margin:0;font-size:13px;color:var(--muted)}
+.readout{font-size:12.5px;color:var(--muted);min-height:1.6em;display:flex;flex-wrap:wrap;gap:4px 14px}
+.readout b{color:var(--fg);font-weight:600}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.chart{width:100%;height:auto;display:block;touch-action:pan-y}
+.chart text{fill:var(--muted);font-family:var(--font-data);font-size:10.5px}
+.chart .grid line{stroke:var(--line);stroke-width:1}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted)}
+
+/* 能源結構 */
+.mix{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;align-items:center}
+.donut text{fill:var(--fg);font-family:var(--font-data)}
+.mixlist{display:flex;flex-direction:column;gap:4px;font-size:13.5px}
+.mixrow{display:grid;grid-template-columns:minmax(0,1fr) auto 52px;gap:10px;align-items:center;padding:3px 0;border-bottom:1px dashed var(--line)}
+.mixrow:last-child{border-bottom:0}
+.mixrow .v{text-align:right}
+.mixrow .p{text-align:right;color:var(--muted)}
+.mixrow.zero{color:var(--faint)}
+.renew{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.renew b{font-family:var(--font-data);font-size:18px;color:var(--fg)}
+
+/* 區域 */
+.regions{display:flex;flex-direction:column;gap:12px}
+.reg{display:grid;grid-template-columns:54px minmax(0,1fr) 92px;gap:10px;align-items:center}
+.reg .n{font-family:var(--font-display);font-size:15px}
+.bars{display:flex;flex-direction:column;gap:4px}
+.bar{height:9px;border-radius:2px;background:var(--sunk);position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:2px}
+.bar.g i{background:var(--accent)}
+.bar.l i{background:var(--faint)}
+.reg .net{text-align:right;font-size:12.5px;line-height:1.35}
+.net .out{color:var(--ok)} .net .in{color:var(--alert)}
+
+/* 地圖 */
+.maplayout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:20px;align-items:start}
+.mapbox{position:relative;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:6px;min-width:0}
+.mapbox svg{width:100%;height:auto;display:block;max-height:620px}
+.county{stroke:var(--surface);stroke-width:.8;cursor:pointer;transition:opacity .15s}
+.county:hover{opacity:.85}
+.county.sel{stroke:var(--fg);stroke-width:1.8}
+.plant{stroke:var(--surface);stroke-width:1;cursor:pointer}
+.plant.off{fill:none!important;stroke-width:1.6}
+.plant.sel{stroke:var(--fg);stroke-width:2}
+.isl{font-size:10px;fill:var(--muted);font-family:var(--font-body)}
+.controls{display:flex;flex-wrap:wrap;gap:8px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--muted);padding:6px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--fg);font-weight:500}
+.toggle{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:5px 10px;background:var(--surface)}
+button:focus-visible,.toggle:focus-within,.county:focus-visible,.rank button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.scale{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
+.scale i{flex:1;height:8px;border-radius:2px;background:linear-gradient(90deg,var(--map-lo),var(--map-hi));border:1px solid var(--line)}
+.detail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.dhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.dhead h3{margin:0;font-family:var(--font-display);font-size:22px}
+.dstats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.dstats div{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.dstats span{display:block;font-size:11.5px;color:var(--muted)}
+.dstats b{font-family:var(--font-data);font-size:17px;font-weight:600}
+.sector{display:flex;height:14px;border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.sector i{display:block;height:100%}
+.plist{display:flex;flex-direction:column;font-size:13px}
+.plist div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.plist div:last-child{border-bottom:0}
+.plist .note{grid-column:1/-1;font-size:11.5px;color:var(--faint);padding:0;border:0;margin-top:-2px}
+.empty{font-size:13px;color:var(--faint)}
+.rank{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 18px}
+.rank button{font:inherit;font-size:12.5px;background:none;border:0;color:var(--fg);display:grid;grid-template-columns:3.2em 3.6em minmax(0,1fr) 3.4em;gap:6px;align-items:center;padding:4px 2px;text-align:left;cursor:pointer;border-radius:4px}
+.rank button:hover{background:var(--sunk)}
+.rank button.sel{background:var(--accent-soft)}
+.rank .o{color:var(--faint);font-family:var(--font-data)}
+.rank .t{height:6px;border-radius:2px;background:var(--accent)}
+.rank .v{text-align:right}
+
+footer{font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:14px}
+footer p{margin:0;max-width:78ch}
+footer a{color:var(--accent)}
+
+@media (max-width:860px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .status{grid-template-columns:minmax(0,1fr)}
+  .light{border-right:0;border-bottom:1px solid var(--line)}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi:nth-child(3){border-left:0}
+  .kpi:nth-child(n+3){border-top:1px solid var(--line)}
+  .maplayout{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:440px){
+  .mix{grid-template-columns:minmax(0,1fr)}
+  .donut{max-width:170px;margin:0 auto}
+  .rank{grid-template-columns:minmax(0,1fr)}
+  .reg{grid-template-columns:44px minmax(0,1fr) 84px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>
+.modes{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface)}
+.modes button{font:inherit;font-size:13.5px;border:0;background:transparent;color:var(--muted);padding:6px 14px;cursor:pointer}
+.modes button[aria-pressed="true"]{background:var(--accent);color:var(--surface);font-weight:500}
+#view-dash{display:flex;flex-direction:column;gap:16px}
+.island{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.stage{position:relative;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:#0B3E57;min-width:0;touch-action:none;user-select:none;-webkit-user-select:none}
+.stage canvas{display:block;width:100%;height:min(calc(100vw * 1.32), 78vh, 900px);cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.hud{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.hudbox{background:rgba(9,24,36,.78);color:#EAF3F8;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px 11px;font-size:12px;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.hudbox .row{display:flex;align-items:center;gap:8px}
+.hudbox b{font-family:var(--font-data);font-size:15px;font-weight:600}
+.hudlamp{width:12px;height:12px;border-radius:50%;box-shadow:0 0 8px currentColor}
+.zoom{position:absolute;left:10px;bottom:68px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:34px;height:34px;border-radius:9px;border:1px solid rgba(255,255,255,.2);background:rgba(9,24,36,.78);color:#EAF3F8;font-size:18px;line-height:1;cursor:pointer;font-family:var(--font-data)}
+.zoom button:focus-visible,.timebar button:focus-visible,.fchips button:focus-visible,.modes button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.timebar{position:absolute;left:10px;right:10px;bottom:10px;display:flex;align-items:center;gap:10px;background:rgba(9,24,36,.78);border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:8px 12px;color:#EAF3F8}
+.timebar button{flex:none;width:34px;height:34px;border-radius:50%;border:0;background:#F2B94F;color:#14202B;font-size:14px;cursor:pointer}
+.timebar input{flex:1;min-width:0;accent-color:#F2B94F}
+.timebar .t{font-family:var(--font-data);font-size:14px;min-width:3.2em;text-align:right}
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.fchips{display:flex;flex-wrap:wrap;gap:6px}
+.fchips button{font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:4px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.fchips button i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.fchips button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.info{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-height:150px}
+.info h3{margin:0;font-family:var(--font-display);font-size:18px;display:flex;align-items:center;gap:8px}
+.info .tag{font-size:12px;color:var(--muted)}
+.info .big{font-family:var(--font-data);font-size:24px;font-weight:600}
+.info .big em{font-style:normal;font-size:13px;color:var(--muted);font-family:var(--font-body);font-weight:400;margin-left:4px}
+.info p{margin:0;font-size:13px;color:var(--muted)}
+.keylist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;font-size:12.5px;color:var(--muted)}
+.keylist span{display:flex;gap:6px;align-items:center}
+.keylist svg{flex:none}
+@media (max-width:860px){.island{grid-template-columns:minmax(0,1fr)}}
+</style>
+
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="eyebrow">TAIWAN POWER GRID · 台電系統</div>
+      <h1>臺灣電力儀表板</h1>
+    </div>
+    <div class="meta">
+      <div class="modes" role="group" aria-label="顯示模式"><button type="button" data-mode="dash" aria-pressed="true">儀表板</button><button type="button" data-mode="island" aria-pressed="false">遊戲島嶼</button></div>
+      <span>資料時間 <b class="num" id="asof">—</b></span>
+      <span class="chip" id="srcchip">載入中</span>
+    </div>
+  </div>
+
+  <div id="view-dash">
+  <section class="status" id="status" aria-label="即時供電狀況"></section>
+
+  <div class="grid">
+    <section class="card">
+      <header><h2>今日用電曲線</h2><p>單位：萬瓩</p></header>
+      <div class="readout" id="ro-load"></div>
+      <svg class="chart" id="ch-load" viewBox="0 0 640 240" role="img" aria-label="今日與昨日用電曲線"></svg>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--accent)"></i>今日用電</span>
+        <span><i class="sw" style="background:var(--faint)"></i>昨日用電</span>
+        <span><i class="sw" style="background:none;border:1.5px dashed var(--crit)"></i>今日供電能力</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>即時能源結構</h2><p>各能源別淨發電量</p></header>
+      <div class="mix">
+        <svg class="donut" id="donut" viewBox="0 0 150 150" role="img" aria-label="即時發電結構圓環圖"></svg>
+        <div class="mixlist" id="mixlist"></div>
+      </div>
+      <div class="renew" id="renew"></div>
+    </section>
+
+    <section class="card wide">
+      <header><h2>今日發電組合變化</h2><p>依能源別堆疊，單位：萬瓩</p></header>
+      <div class="readout" id="ro-stack"></div>
+      <svg class="chart" id="ch-stack" viewBox="0 0 1000 260" role="img" aria-label="今日各能源發電堆疊面積圖"></svg>
+      <div class="legend" id="stack-legend"></div>
+    </section>
+
+    <section class="card">
+      <header><h2>區域供需</h2><p>北・中・南・東 即時發電與用電</p></header>
+      <div class="regions" id="regions"></div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--accent)"></i>區域發電</span>
+        <span><i class="sw" style="background:var(--faint)"></i>區域用電</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <header><h2>近 30 日尖峰備轉容量率</h2><p>10% 以上為綠燈</p></header>
+      <svg class="chart" id="ch-reserve" viewBox="0 0 640 230" role="img" aria-label="近30日尖峰備轉容量率"></svg>
+      <div class="readout" id="ro-reserve"></div>
+    </section>
+
+    <section class="card wide">
+      <header><h2>縣市用電與電廠分布</h2><p id="map-note">點選縣市或電廠查看細節</p></header>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="地圖指標">
+          <button type="button" id="m-total" aria-pressed="true" data-m="total">總用電</button>
+          <button type="button" id="m-res" aria-pressed="false" data-m="res">住宅</button>
+          <button type="button" id="m-ind" aria-pressed="false" data-m="ind">工業</button>
+        </div>
+        <label class="toggle"><input type="checkbox" id="showPlants" checked> 顯示電廠</label>
+      </div>
+      <div class="maplayout">
+        <div class="mapbox">
+          <svg id="map" role="img" aria-label="臺灣縣市用電地圖"></svg>
+          <div class="scale"><span id="scale-lo">少</span><i></i><span id="scale-hi">多</span></div>
+        </div>
+        <div class="detail">
+          <div id="detail"></div>
+          <div>
+            <div class="eyebrow" style="margin-bottom:6px">縣市排名 · <span id="rank-label">月用電量（億度）</span></div>
+            <div class="rank" id="rank"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  </div>
+
+<section id="view-island" hidden aria-label="遊戲島嶼模式">
+  <div class="island">
+    <div class="stage" id="stage">
+      <canvas id="isl" aria-label="臺灣電力遊戲島嶼：依地理位置顯示各電廠與用電城市"></canvas>
+      <div class="hud">
+        <div class="hudbox"><div class="row"><i class="hudlamp" id="h-lamp"></i><span id="h-light">—</span></div></div>
+        <div class="hudbox"><div>用電 <b id="h-load">—</b> 萬瓩</div><div>再生能源 <b id="h-re">—</b></div></div>
+      </div>
+      <div class="zoom">
+        <button type="button" id="z-in" aria-label="放大">＋</button>
+        <button type="button" id="z-out" aria-label="縮小">－</button>
+        <button type="button" id="z-reset" aria-label="回到全島" style="font-size:13px">⌂</button>
+      </div>
+      <div class="timebar">
+        <button type="button" id="t-play" aria-label="播放今日回放">▶</button>
+        <input type="range" id="t-range" min="0" max="81" step="1" value="81" aria-label="時間">
+        <span class="t" id="t-label">13:30</span>
+      </div>
+    </div>
+    <div class="side">
+      <div>
+        <div class="eyebrow" style="margin-bottom:6px">只看某種能源</div>
+        <div class="fchips" id="fchips"></div>
+      </div>
+      <div class="info" id="info"></div>
+      <div class="card" style="gap:8px">
+        <div class="eyebrow">圖例</div>
+        <div class="keylist" id="keylist"></div>
+        <p class="empty" style="margin:0">風機轉速、煙囪冒煙量、光點流量都跟著發電量變化。拖動畫面可移動，兩指或滾輪可縮放，下方時間軸可重播今天。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+  <footer>
+    <p><b>關於資料</b>：版面與欄位依台電「今日電力資訊」設計，即時資料來源為 loadpara.json（用電與燈號）、genary.json（各機組發電量）、genloadareaperc.csv（區域供需）；縣市用電來自政府資料開放平臺「台灣電力公司各縣市住宅、服務業及機關用電統計資料」。資料每 10 分鐘由 GitHub Actions 自動抓取一次；抓不到時頁面會標示並改用示意資料。</p>
+    <p>燈號定義：綠燈備轉容量率 ≥10%、黃燈 6–10%、橘燈 ≤6%、紅燈備轉容量 ≤90 萬瓩、黑燈 ≤50 萬瓩。1 萬瓩 = 10 MW。金門、連江為獨立電網，未繪於地圖。</p>
+    <p>資料來源：<a href="https://www.taipower.com.tw/d006/loadGraph/loadGraph/load_reserve_.html" target="_blank" rel="noopener">台電今日電力資訊</a> · <a href="https://data.gov.tw/dataset/29935" target="_blank" rel="noopener">政府資料開放平臺</a>。本頁非台電官方產品。</p>
+  </footer>
+</div>
+
+<script>
+const ISL = {"plants":[{"id":"datan","name":"大潭電廠","fuel":"lng","cap":7500,"share":0.3,"region":"北","county":"桃園市","m":["大潭"],"xy":[224.9,63]},{"id":"tongxiao","name":"通霄電廠","fuel":"lng","cap":3200,"share":0.14,"region":"中","county":"苗栗縣","m":["通霄"],"xy":[178.1,138.2]},{"id":"tcgas","name":"台中電廠（燃氣）","fuel":"lng","cap":1300,"share":0.09,"region":"中","county":"臺中市","m":["台中CC"],"xy":[152.8,174.3]},{"id":"xingda","name":"興達電廠（燃氣）","fuel":"lng","cap":3500,"share":0.14,"region":"南","county":"高雄市","m":["興達新CC","興達CC"],"xy":[119.9,363.5]},{"id":"nanbu","name":"南部電廠","fuel":"lng","cap":1100,"share":0.05,"region":"南","county":"高雄市","m":["南部CC"],"xy":[133.8,401.9]},{"id":"dalingas","name":"大林電廠（燃氣）","fuel":"lng","cap":550,"share":0.04,"region":"南","county":"高雄市","m":["大林#5","大林#6"],"xy":[138.9,410.1]},{"id":"haihu","name":"海湖電廠（民營）","fuel":"lng","cap":900,"share":0.04,"region":"北","county":"桃園市","m":["海湖"],"xy":[252.8,56]},{"id":"guoguang","name":"國光電廠（民營）","fuel":"lng","cap":480,"share":0.02,"region":"北","county":"桃園市","m":["國光"],"xy":[249,72.8]},{"id":"xintao","name":"新桃電廠（民營）","fuel":"lng","cap":630,"share":0.03,"region":"北","county":"新竹縣","m":["新桃"],"xy":[233.8,89.5]},{"id":"xingzhang","name":"星彰電廠（民營）","fuel":"lng","cap":507,"share":0.02,"region":"中","county":"彰化縣","m":["星彰"],"xy":[145.2,199.3]},{"id":"xingyuan","name":"星元電廠（民營）","fuel":"lng","cap":549,"share":0.02,"region":"中","county":"雲林縣","m":["星元"],"xy":[122.4,242.2]},{"id":"jiahui","name":"嘉惠電廠（民營）","fuel":"lng","cap":1210,"share":0.04,"region":"南","county":"嘉義縣","m":["嘉惠"],"xy":[133.8,280.9]},{"id":"fengde","name":"豐德電廠（民營）","fuel":"lng","cap":2114,"share":0.05,"region":"南","county":"臺南市","m":["豐德"],"xy":[140.1,333.2]},{"id":"tccoal","name":"台中電廠（燃煤）","fuel":"coal","cap":4400,"share":0.4,"region":"中","county":"臺中市","m":["台中#"],"xy":[156.6,178.5]},{"id":"linkou","name":"林口電廠","fuel":"coal","cap":2400,"share":0.22,"region":"北","county":"新北市","m":["林口"],"xy":[259.1,50.4]},{"id":"dalin","name":"大林電廠（燃煤）","fuel":"coal","cap":1600,"share":0.2,"region":"南","county":"高雄市","m":["大林#1","大林#2"],"xy":[135.1,407.4]},{"id":"xingdacoal","name":"興達電廠（燃煤）","fuel":"coal","cap":550,"share":0.02,"region":"南","county":"高雄市","m":["興達#"],"note":"燃煤機組多已停用或轉為備用","xy":[122.4,366.2]},{"id":"hoping","name":"和平電廠（民營）","fuel":"coal","cap":1309,"share":0.16,"region":"東","county":"花蓮縣","m":["和平"],"xy":[316,163.2]},{"id":"hsiehho","name":"協和電廠","fuel":"oil","cap":1000,"share":0,"region":"北","county":"基隆市","m":["協和"],"note":"燃油機組，燃氣新機組建置中","xy":[314.8,46.2]},{"id":"jianshan","name":"澎湖尖山電廠","fuel":"oil","cap":130,"share":0.8,"region":"離島","county":"澎湖縣","m":["澎湖尖山"],"note":"澎湖獨立電網的主要電源","xy":[46.5,264.3]},{"id":"npp1","name":"核一廠（金山）","fuel":"nuclear","cap":0,"share":0,"region":"北","county":"新北市","m":[],"note":"已停止運轉，除役中","xy":[295.8,26.6]},{"id":"npp2","name":"核二廠（國聖）","fuel":"nuclear","cap":0,"share":0,"region":"北","county":"新北市","m":[],"note":"2023 年停機，除役中","xy":[304.6,39.2]},{"id":"npp3","name":"核三廠（馬鞍山）","fuel":"nuclear","cap":0,"share":0,"region":"南","county":"屏東縣","m":[],"note":"2025 年 5 月停機，目前全台沒有核能發電","xy":[189.5,486.7]},{"id":"feicui","name":"翡翠水力","fuel":"hydro","cap":70,"share":0.03,"region":"北","county":"新北市","m":["翡翠"],"xy":[294.5,79.7]},{"id":"wulai","name":"烏來・桂山・粗坑水力","fuel":"hydro","cap":41,"share":0.06,"region":"北","county":"新北市","m":["烏來"],"xy":[289.5,86.7]},{"id":"shimen","name":"石門水力","fuel":"hydro","cap":90,"share":0.12,"region":"北","county":"桃園市","m":["石門"],"xy":[252.8,93.7]},{"id":"yixing","name":"義興水力","fuel":"hydro","cap":40,"share":0.02,"region":"北","county":"桃園市","m":["義興"],"xy":[269.2,103.4]},{"id":"zhuolan","name":"卓蘭水力","fuel":"hydro","cap":80,"share":0.06,"region":"中","county":"苗栗縣","m":["卓蘭"],"xy":[199.6,163.2]},{"id":"dajia","name":"大甲溪水力（德基・青山・谷關・天輪・馬鞍）","fuel":"hydro","cap":1076,"share":0.3,"region":"中","county":"臺中市","m":["德基","青山","谷關","天輪","馬鞍"],"xy":[233.8,173]},{"id":"wanda","name":"萬大・松林水力","fuel":"hydro","cap":77,"share":0.03,"region":"中","county":"南投縣","m":["萬大","松林"],"xy":[237.6,207.6]},{"id":"sunmoon","name":"日月潭水力（大觀一・鉅工・水里・名間）","fuel":"hydro","cap":183,"share":0.06,"region":"中","county":"南投縣","m":["大觀一","鉅工","水里","名間"],"xy":[200.9,229.8]},{"id":"zengwen","name":"曾文水力","fuel":"hydro","cap":50,"share":0.02,"region":"南","county":"臺南市","m":["曾文"],"xy":[164.2,314]},{"id":"liwu","name":"立霧水力","fuel":"hydro","cap":32,"share":0.02,"region":"東","county":"花蓮縣","m":["立霧"],"xy":[290.7,184.1]},{"id":"longjian","name":"龍澗水力","fuel":"hydro","cap":97,"share":0.04,"region":"東","county":"花蓮縣","m":["龍澗"],"xy":[278.1,203.5]},{"id":"bihai","name":"碧海水力","fuel":"hydro","cap":61,"share":0.03,"region":"東","county":"花蓮縣","m":["碧海"],"xy":[299.6,164.6]},{"id":"mingtan","name":"明潭・大觀二抽蓄","fuel":"storage","cap":2602,"share":0.9,"region":"中","county":"南投縣","m":["明潭","大觀二"],"note":"抽蓄水力：白天用多餘電力把水抽上山，傍晚尖峰放水發電","xy":[205.9,225.6]},{"id":"ow-miaoli","name":"苗栗外海風場（海洋竹南・海能）","fuel":"wind","cap":504,"share":0.12,"region":"中","county":"苗栗縣","m":["海洋竹南","海能"],"sea":true,"n":4,"xy":[173,111.8]},{"id":"ow-gch","name":"大彰化離岸風場（沃旭）","fuel":"wind","cap":1700,"share":0.4,"region":"中","county":"彰化縣","m":["沃"],"sea":true,"n":7,"xy":[102.2,197.9]},{"id":"ow-chc","name":"彰化近岸風場（彰芳・中能・台電離岸）","fuel":"wind","cap":1000,"share":0.2,"region":"中","county":"彰化縣","m":["芳一","芳二","中能","離岸一期","離岸二期"],"sea":true,"n":5,"xy":[122.4,213.2]},{"id":"ow-hailong","name":"海龍離岸風場","fuel":"wind","cap":1000,"share":0.1,"region":"中","county":"彰化縣","m":["龍A","龍B","龍三"],"sea":true,"n":5,"xy":[85.7,217.3]},{"id":"ow-yunlin","name":"雲林外海風場（允能）","fuel":"wind","cap":640,"share":0.09,"region":"中","county":"雲林縣","m":["允湖","允西"],"sea":true,"n":4,"xy":[97.1,243.6]},{"id":"lw-taoyuan","name":"桃園陸域風場（觀園・觀音・新屋）","fuel":"wind","cap":78,"share":0.01,"region":"北","county":"桃園市","m":["觀園","觀威"],"n":2,"xy":[233.8,60.2]},{"id":"lw-miaoli","name":"苗栗陸域風場（大鵬）","fuel":"wind","cap":42,"share":0.01,"region":"中","county":"苗栗縣","m":["苗栗大鵬"],"n":2,"xy":[185.7,117.4]},{"id":"lw-taichung","name":"台中陸域風場（台中港・大安）","fuel":"wind","cap":111,"share":0.02,"region":"中","county":"臺中市","m":["台中港","中威大安"],"n":3,"xy":[161.7,164.6]},{"id":"lw-changhua","name":"彰化陸域風場（彰工・彰濱・王功）","fuel":"wind","cap":164,"share":0.02,"region":"中","county":"彰化縣","m":["彰工","鹿威彰濱","王功"],"n":3,"xy":[145.2,195.2]},{"id":"lw-yunlin","name":"雲林陸域風場（麥寮・四湖・崙背）","fuel":"wind","cap":99,"share":0.01,"region":"中","county":"雲林縣","m":["雲麥","四湖","新源崙背"],"n":2,"xy":[119.9,247.7]},{"id":"sp-changbin","name":"彰濱・崙尾光電","fuel":"solar","cap":700,"share":0.05,"region":"中","county":"彰化縣","m":["彰濱光","崙尾光","星崙光"],"xy":[145.2,191]},{"id":"sp-nanyan","name":"南鹽光電","fuel":"solar","cap":150,"share":0.02,"region":"南","county":"臺南市","m":["南鹽光"],"xy":[111,336]},{"id":"sp-roof-n","name":"北部分散式光電","fuel":"solar","cap":1800,"share":0.11,"region":"北","county":"桃園市","m":[],"roof":true,"pool":0.12,"xy":[265.4,76.9]},{"id":"sp-roof-c","name":"中部分散式光電","fuel":"solar","cap":3500,"share":0.22,"region":"中","county":"彰化縣","m":[],"roof":true,"pool":0.24,"xy":[173,203.5]},{"id":"sp-coast-y","name":"雲林沿海光電","fuel":"solar","cap":1000,"share":0.06,"region":"中","county":"雲林縣","m":[],"pool":0.08,"xy":[125,264.3]},{"id":"sp-coast-c","name":"嘉義沿海光電","fuel":"solar","cap":900,"share":0.05,"region":"南","county":"嘉義縣","m":[],"pool":0.07,"xy":[114.8,294.7]},{"id":"sp-coast-t","name":"台南沿海光電","fuel":"solar","cap":1200,"share":0.07,"region":"南","county":"臺南市","m":[],"pool":0.09,"xy":[107.2,320.8]},{"id":"sp-roof-s","name":"南部分散式光電","fuel":"solar","cap":3800,"share":0.22,"region":"南","county":"高雄市","m":[],"roof":true,"pool":0.25,"xy":[142.7,347]},{"id":"sp-pingtung","name":"屏東漁電共生","fuel":"solar","cap":1000,"share":0.06,"region":"南","county":"屏東縣","m":[],"pool":0.1,"xy":[157.9,415.6]},{"id":"sp-roof-e","name":"東部分散式光電","fuel":"solar","cap":400,"share":0.02,"region":"東","county":"臺東縣","m":[],"roof":true,"pool":0.05,"xy":[242.6,364.8]}],"cities":[{"name":"臺北","counties":["臺北市","新北市","基隆市"],"xy":[284.4,61.6]},{"name":"桃園","counties":["桃園市"],"xy":[256.6,70]},{"name":"新竹","counties":["新竹市","新竹縣"],"xy":[218.6,95.1]},{"name":"苗栗","counties":["苗栗縣"],"xy":[198.3,128.5]},{"name":"臺中","counties":["臺中市"],"xy":[180.6,185.4]},{"name":"彰化","counties":["彰化縣"],"xy":[162.9,196.5]},{"name":"南投","counties":["南投縣"],"xy":[181.9,218.7]},{"name":"雲林","counties":["雲林縣"],"xy":[161.7,247.7]},{"name":"嘉義","counties":["嘉義市","嘉義縣"],"xy":[151.5,279.5]},{"name":"臺南","counties":["臺南市"],"xy":[122.4,344.2]},{"name":"高雄","counties":["高雄市"],"xy":[133.8,395]},{"name":"屏東","counties":["屏東縣"],"xy":[156.6,389.5]},{"name":"宜蘭","counties":["宜蘭縣"],"xy":[316,102]},{"name":"花蓮","counties":["花蓮縣"],"xy":[297.1,209]},{"name":"臺東","counties":["臺東縣"],"xy":[238.8,377.2]},{"name":"澎湖","counties":["澎湖縣"],"xy":[41.4,265.7]}],"mountains":[[286.9,106.2],[271.7,129.9],[259.1,150.7],[251.5,153.5],[240.1,178.5],[227.5,199.3],[221.1,222.9],[223.7,247.7],[212.3,279.5],[217.3,302.9],[205.9,330.5],[195.8,364.8],[202.1,399.1],[269.2,148],[252.8,240.8],[233.8,289.2],[243.9,206.2],[262.9,178.5],[214.8,351.1],[275.5,213.2]],"coast":"M342.6,88.8L342.8,90.2L341.1,90.1L339.4,88.7L340.5,88.9L341,87.9ZM283.9,284.4L281.6,289.8L280.9,293.1L280.9,295.7L280.3,296.7L280.3,298.5L279.6,301.2L277.7,301.7L275.5,305.5L275.2,307.6L274.4,308.8L273.6,311.9L274.3,313.1L272.9,314.9L271.5,315.6L271.5,318.7L272.2,319.6L272.7,321.9L271.7,325.6L273.4,327.2L272.6,328.3L271.1,328.6L269.6,331.1L267.6,331L266.1,333.3L264,339.5L263.8,341.5L262.7,342.1L262,343.6L262.1,345.1L261.2,346.8L258.5,350.5L257.1,351.2L256.4,353.6L255.1,356.4L254.3,357.1L252.4,360.5L251.5,360.8L250.5,362.9L249.7,362.5L247.6,363L245.4,364.9L244.7,367.2L245.5,368.2L246.5,371.9L245.8,373L244.1,374L243.5,377.2L241,378.9L237.3,382.8L233.9,384.7L231.4,385.7L228.1,388.7L226.1,389.5L224.4,391.5L222.7,396.5L222.3,400.7L219.3,403.3L218.2,405.4L216,412.2L214.3,418.7L212.7,423.4L210.4,428.6L209.6,432.1L208.8,433L207.8,435.5L207.5,438.1L207.4,443.3L208,447.5L208.4,449.3L207.8,450.6L208,453.4L207.3,454.5L207.7,457L207.5,460.7L208,462L206.8,463.5L207.5,466.2L208.7,466.8L207.7,469.1L207.7,474.4L208.6,476.7L207.1,477.7L206.8,479L205.7,479.7L205.4,481.4L203.6,482.5L202,482.8L201.1,486.7L202,490.2L203.7,492.4L204.3,494.5L203.2,495.4L202.3,495.3L201.7,493L200.5,492.7L198.6,490.2L197.5,490.3L195.4,489.1L193.7,488.9L191.3,486.8L189.9,487.3L189,488.9L189.1,490.2L188.2,492.2L186.8,492.3L184.5,490.2L184.9,483.8L183.9,482.1L182.4,480.9L181.3,477.9L182.5,475.4L182.9,473.7L183.7,473.6L183.9,471.5L183.1,469.9L185.3,468.5L184.3,464.4L182.9,462L183.1,460.7L181.8,455.5L181.1,454.1L181.2,452.5L179.6,450.2L179.6,449.3L177.8,448L176.7,446.3L177.1,444.6L175.9,441.4L175.9,440L175.1,438.5L171.2,434.4L170.4,432.6L168.7,430.7L164.1,427.6L158.9,424.9L152.6,421.1L149.8,418.4L149.4,417.2L148.3,417.1L145.4,416.4L141.8,414L136.8,409.9L136.8,408.9L134.1,410.8L131.7,407.6L133.5,408L134.7,409.5L135.3,409L133.5,406.6L132.4,406.3L132.9,404.9L128,398.9L128.2,397.7L127,396.7L127.9,395.8L126.2,392.2L126.4,390.6L128,388.8L127.8,385.7L127,382.9L126.3,381.7L121.5,370.7L119.6,371L118.7,369.6L120.6,368.9L119.8,365.7L118.6,363.4L119,362.8L116.7,356.4L116.7,353.4L116.3,351.1L115.2,349L114.2,349.1L114.7,347.7L112.1,344.7L108.5,341.6L105.6,339.7L102.4,338.1L101.9,338.3L99.5,334.9L98.2,335.1L98.1,333.9L99,330.1L100.1,327.8L101.2,326.9L102.6,320.7L104.4,316.6L104.9,313.6L104.8,311.5L105.9,309.9L106.4,307.7L106.8,303.1L108.6,301.5L108.6,298.6L109.5,297.4L110.8,294.2L111.2,291.3L114.5,291.2L115.3,290.1L114.8,288.3L113.7,289.2L113.3,287.1L113.7,285.6L113,285.2L114.1,282.6L113.7,281.5L111.4,282L112.9,280.9L112.8,279.5L114.3,277.6L114.6,276L111.5,277L109.7,276L109.6,273.3L110.7,272.6L112.6,273L113,272.5L113.6,271L112.2,268.5L112.7,265.4L111.9,258.7L112.1,257.2L110.2,258.5L109.1,256.6L110.3,255.6L111.7,252.3L112.2,249.9L113,248.9L113.2,246.8L114.3,245.1L115.6,241.9L116,239.6L114.4,236.1L117.5,232.6L117.6,231.7L119,231.3L120.9,228.8L120.5,227.2L121.7,226.9L122.5,224.8L124.4,222.1L125.9,221.7L127.2,220.2L127,219L128.6,215.8L130,215.3L130.5,212.4L133.5,210L133.7,208L134.6,206.3L136.9,204.3L137.8,200.7L137.9,197.9L138.9,196.3L140.6,195L143.2,194.1L142.9,192.8L144.8,190L145.2,187.5L146.1,186.9L147.1,184.4L147.2,182.7L148.3,180.8L150.8,180L152.4,177.5L153.9,176.5L154.9,175.1L156.6,170.8L157,169.3L157.6,169.6L159.2,165.7L160,164.8L160.9,162.4L161.9,161.8L163,159.7L163.6,159.8L165.3,157.7L165.8,156.1L169.2,150.8L170.4,149.6L173.3,145.1L178.8,139.1L179.2,136.9L181.2,133.9L182.3,130L183.3,128.3L184.4,124.2L185.2,122.8L187,121.4L188,120L189,119.9L190.2,118.5L190.5,117.1L192.8,114.5L194.4,113.6L198.7,112.8L202.9,108.7L203.6,106L205.2,103.7L208.2,100L207.6,99.3L207.5,96.2L208.8,91.7L210.5,89.3L210.5,87.7L211.7,87.4L213.4,85.7L215.1,81.8L215.9,80.7L217.3,77.1L218.9,75.5L222.4,70.7L222.3,68.5L223.2,67.8L223.7,66L224.7,64.3L227.7,61.1L232.1,59.3L232.5,58.4L236.9,56.4L241,55.4L244.5,53.8L248,51.8L251.4,51L254,49.9L257,50.7L260.3,49.6L261.6,49.9L265.9,48.8L270.4,46.5L270.7,43.7L272,45L274.1,42.4L272.3,41.6L272.4,40.6L274.1,40.4L274.1,39.3L275.7,37L276.5,36.5L278.4,31.8L280.8,31.4L282,29.3L285.5,27.6L285.9,26.4L286.5,27.3L288.6,26.6L289.1,25.2L289.6,26L292,26.3L294.2,25.4L296.7,26.4L298.1,27.8L300,28.9L301.4,30.8L301.3,33.5L302.5,34.9L303.7,34.6L303.4,36L304.1,37.4L306,38.8L308.1,38.5L309.2,37.2L309.2,38.7L307.9,40.7L308.8,42L310.9,42.5L310.6,44L312.7,44.1L315.8,45.3L317.6,44.3L319.9,45L319,45.3L321.5,46.6L323.3,46.3L322.8,48.1L323.7,48.6L325.7,48.2L324.9,49.1L325.2,50.2L326,49.4L327.5,49.2L331,50L332,49.6L334,50.4L338.4,49.2L337.2,50.9L338.4,52.1L337.5,52.9L336.8,54.6L337,56.3L338.6,57.3L339,58.4L338.8,61.6L341,64.2L344.3,63.5L346.4,64.2L346.6,65.4L347.4,64.4L348.5,65.6L348.3,66.9L347.2,67.1L345.6,68.5L343.4,69.5L342.4,69.6L338.3,71.6L337.1,73.9L335.7,74.6L335.6,75.6L334.4,75.4L333.5,76.2L333.2,78.5L330,81.9L328.9,82.5L326.2,88L325.4,91L324.8,95.4L324.7,100L325,102.4L326,105.3L327.2,106.5L327,107.5L327.2,112.8L328.1,116.7L329.8,120.6L330.7,121.5L333.1,122.5L331.7,123.4L332.4,124.2L331.7,125.1L332.5,125.8L331.2,126.3L331.7,132L331.2,132.9L327.7,134L327.2,135.9L327.5,137.1L328.8,137.6L328.8,138.9L330,139.1L327.6,140.2L324.9,142.2L325.1,143L322.6,146L321.2,149.6L320.7,154.6L319,158.6L318.7,160.1L319.1,162.5L318.5,164.3L315.8,167.4L315.3,170L313.3,172.2L311.7,172.7L310.5,175L306.4,177.5L305.1,179.3L304.5,182.4L305.2,184.7L305.1,187.6L304,189.4L301.3,191.3L299.5,193.8L299.1,197.7L300.9,202L302.6,203.6L303.1,205L302.1,206.9L300.6,210.5L299.9,209.3L298.1,211.7L298.6,215.5L297.7,218.6L297.8,220.2L296.8,226L294.1,232.4L293.4,236.4L293.7,239.1L293.2,240.9L292,243.7L291,244.6L290.6,246.1L291.2,248L290.2,251.2L289.9,253.8L288.9,255.3L288.4,257.9L288.2,261.9L287.7,264.8L285.8,268.3L284.9,273L285.4,276.6L286.2,277.1L284.4,281.4ZM104.8,272L106.1,272.6L106.7,273.9L105,273.7L103.6,276.1L101.4,276.5L102.8,277.1L102.5,278.1L101.5,277L100.8,278.6L100.1,277.5L98.4,278.2L97.4,279.6L97.7,280.8L95.5,280.7L97.1,283.1L97,284.2L95.1,280.8L94.2,280.1L96.6,277.5ZM107.2,269.6L107.9,270.4L106.7,272.4L106.1,271.1ZM111.3,268.9L111.9,269.4L110.7,270.9ZM111.3,266.6L109.2,269L107.7,269.3L108.8,267.7L109.9,267.6ZM111.1,265.8L111.1,265.8L111.1,265.8ZM320.9,39.8L320.9,39.8L320.9,39.8ZM113.8,290.2L113.8,290.2L113.8,290.2ZM298.5,489L297.5,487.8L298.9,487.4ZM285,469.6L286.1,470.2L292.8,469.7L293.4,472.4L294,473L292.5,473.8L293,475.6L294.4,476.8L296.6,477.8L297.3,479.1L296.2,481L294.5,480.5L293.3,480.9L292.3,478.8L290.6,477.7L289.3,477.9L285.7,474.7L285.5,471.6L284.3,470.2ZM283.3,388.5L285.7,388.6L285.8,389.6L284.3,392.8L285,394.2L283.8,394.7L282.6,393.1L281,392.8L281.3,391.1L280,389.5L280.1,388.7L281.8,389ZM23.8,313.8L24.1,316.7L22.4,317.2L22.5,318.6L21,317.3L21.3,316.3L20.1,315.1L20.5,314.3ZM46,309.3L46.1,310.7L45.1,309.6ZM53.8,307.9L53.1,310.6L52.2,309.7L52.4,308.3ZM51.7,307.8L51.7,307.8L51.7,307.8ZM33.8,307.8L33.8,307.8L33.8,307.8ZM32.2,306.7L32.2,306.7L32.2,306.7ZM10.6,299.9L10.6,299.9L10.6,299.9ZM36,292.6L36.9,294L35.5,293.7L33.9,294.5L33.8,293.7ZM30.5,289.5L31.5,290.7L32.3,290.4L32.4,293L33.4,293.6L32.3,294L33,295.7L29.6,295.2L30.6,293.9L30.3,292L30.8,290.9ZM8.5,287.5L9.9,288.5L7.9,289.2ZM36.5,275.9L35,277.2L32.7,277.7L33.9,276.4ZM33.9,273.3L33.9,273.3L33.9,273.3ZM40.3,259.1L40.3,259.1L40.3,259.1ZM48.3,254.4L48.3,254.4L48.3,254.4ZM52.1,251.9L52.4,253.3L51,253.1ZM38.4,251L38.4,251L38.4,251ZM42,251L43.9,251.4L45.5,254.3L43.7,255.9L44.7,258.7L45.7,258.9L45.2,260.1L45.6,261.3L47,260.4L47.1,264.3L47.6,264.3L49,261.7L49.2,263.1L50.4,260.2L51.9,262.8L52.7,261.3L54.2,263.6L54.2,265.3L55.8,267.8L53.9,268.3L53.6,267.1L49.9,267L45.6,270.3L44.7,271.4L45.4,272.8L44.8,274.3L42.6,273.6L40.4,274.2L40.7,272.9L39.8,271.8L38.5,272.1L37.7,270.3L36.5,270L36.6,268.7L37.9,268.7L38.5,270.1L38.2,271.3L40.4,270.9L40.7,272.6L41.5,271L43.4,271.7L43.3,270.3L44.4,269.8L43.9,268.4L43,268.1L40.6,269L39.2,268.5L39.3,267.4L40.3,268.1L41.4,266.6L40.7,266L38.9,266.8L39.7,265.2L39.2,263.6L40.7,263.7L41.8,262.8L42.4,265.4L43.6,265.8L44,263.7L44.8,263.6L44.3,261.5L45.2,260.1L43.7,259.4L44.7,258.8L43.3,258.1L43.2,255.8L41.7,254.3L41.6,253.1L40.3,252.9L39.3,254.5L38.2,253.6L36.7,255.6L36.4,256.9L33.5,257.9L34.2,261.3L32.9,262.6L33.2,266.5L31,266L30,266.7L27.2,266.9L29.2,265L30.5,265.6L31.7,264.4L31.9,263.3L30,262.2L32.4,259.7L31.2,258.8L32.8,255L33.8,255L33.1,253.9L34.4,253.8L33.8,255.4L35.2,256.1L36.4,256L38.1,253.6L38.3,252.1ZM45.2,246.3L45.2,246.3L45.2,246.3ZM37.9,244.9L37.9,244.9L37.9,244.9ZM45.5,240L46.9,241.8L45.5,242L44.4,243.3L43.4,242.5ZM44.8,237.3L43.9,239.7L43.9,238.1ZM142.6,432.6L143.7,433.3L143.6,434.5L141.1,436.6L139.5,437L139.3,436.2L140.5,434.7L140.3,433.9Z"};
+const GEO = {"W":360,"H":520,"counties":{"宜蘭縣":{"d":"M342.6,88.8L342.8,90.2L341.1,90.1L339.4,88.7L340.5,88.9L341,87.9ZM343.4,69.5L342.4,69.6L338.3,71.6L337.1,73.9L335.7,74.6L335.6,75.6L334.4,75.4L333.5,76.2L333.2,78.5L330,81.9L328.9,82.5L326.2,88L325.4,91L324.8,95.4L324.7,100L325,102.4L326,105.3L327.2,106.5L327,107.5L327.2,112.8L328.1,116.7L329.8,120.6L330.7,121.5L333.1,122.5L331.7,123.4L332.4,124.2L331.7,125.1L332.5,125.8L331.2,126.3L331.7,132L331.2,132.9L327.7,134L327.2,135.9L327.5,137.1L328.8,137.6L328.8,138.9L330,139.1L327.6,140.2L324.9,142.2L325.1,143L322.6,146L321.2,149.6L320.7,154.6L319,158.6L318.7,160.1L319.1,162.5L317.2,162.7L315.4,161.5L311.5,160.9L309.4,159.9L308.4,160L307.7,159L306.7,159.4L305.1,157.8L303.2,157.8L301,154.8L299.8,155.4L299.9,156.8L301,158.5L301.2,159.8L299.3,158.4L299,160L298,159.7L296.6,160.7L297.9,162.9L295.7,162.7L292,161.5L291.5,160.3L289.5,159.6L285,158.7L284.2,159.2L282.6,157.9L280,156.9L278.3,155.6L277.8,154.2L277.2,154.5L276.5,153.1L272.7,153.9L272,153.6L269.4,155.3L268.4,155.2L267.3,152.3L266.1,151.7L264,152.1L262.6,151L262.6,146L261.3,145L262.1,142.9L263.6,141.4L264.5,139.4L266.4,138.7L268,137.1L268.4,135.5L269.7,135.4L270.7,133.5L272,132.8L271.1,129.1L272.2,127.2L273.3,126.7L272.1,124.1L273.3,122.4L275.3,122.1L276.2,119.5L278.2,115.8L278,114.3L279.3,112.7L281.9,112.6L283.5,112.7L285.9,111.2L287.4,111.3L289.1,110.6L289.9,108.2L293.3,107.1L293.9,107.6L294.2,106L295.5,106.2L296.7,105.1L295.8,101.8L296.7,98.9L296,96.8L298.3,95.9L300.3,95.8L300.3,93.9L302.7,93.8L303.1,93.1L304.7,93.6L305.8,92.6L306.4,93.1L308.4,92.7L308.1,91.7L312.5,88.1L313.8,87.3L315,87.8L317.4,87.2L318.5,85.9L319.3,86L320.5,84.7L320,82.6L323.8,80.2L324.7,80.7L326.4,80.4L329,77.8L328.3,75.8L327.4,75.2L327.6,73.6L328.3,72.7L330.1,72.2L331.4,72.6L333.6,72.3L335.4,70.7L340.2,69.3L340.6,68.8L343,68.9Z","c":[302.2,127]},"彰化縣":{"d":"M152.4,177.5L158.4,179.7L158.9,180.3L161,185.1L160.8,186.7L161.9,188.6L164.1,190.5L167,191.2L172.1,192L172.4,194.6L173.7,196.7L173.5,198.9L174.1,200.9L173.7,202.1L175.1,201.9L176.2,202.6L176.4,201.5L177.5,202L180.5,204.3L179.7,205.4L175.9,205L175.3,207.1L176.8,208.3L176.4,211.3L175.2,212.8L174,212.9L175.2,214.9L174.1,215.9L175.2,216.7L174.4,218.9L174.9,220.3L173.1,224.9L174,226L172.9,228.2L175.5,230.1L175.6,231.1L176.9,232.2L179.9,231.1L181.1,233.7L178.9,234.8L175.6,235.8L172.4,235.1L169.6,235.2L164.3,233.8L161.4,234L159.3,233.9L155.7,233L151.8,231.5L149.4,229.7L146.5,230.3L141.4,230L140.1,230.7L133.6,231.1L126.9,229.2L124.4,227.3L122.5,224.8L124.4,222.1L125.9,221.7L127.2,220.2L127,219L128.6,215.8L130,215.3L130.5,212.4L133.5,210L133.7,208L134.6,206.3L136.9,204.3L137.8,200.7L137.9,197.9L138.9,196.3L140.6,195L143.2,194.1L142.9,192.8L144.8,190L145.2,187.5L146.1,186.9L147.1,184.4L147.2,182.7L148.3,180.8L150.8,180Z","c":[153.9,211.1]},"南投縣":{"d":"M175.6,235.8L178.9,234.8L181.1,233.7L179.9,231.1L176.9,232.2L175.6,231.1L175.5,230.1L172.9,228.2L174,226L173.1,224.9L174.9,220.3L174.4,218.9L175.2,216.7L174.1,215.9L175.2,214.9L174,212.9L175.2,212.8L176.4,211.3L176.8,208.3L175.3,207.1L175.9,205L179.7,205.4L180.5,204.3L184,205.5L185.6,204.9L187.2,205L189,206.4L190.5,205.4L192.1,205L192.2,204.2L193.9,202.9L196.3,198.8L196.7,197.3L199.5,196.3L199.4,193.1L200.4,190L201.5,189L202.6,189L203.1,190L205,190L206.1,192.3L205.7,194.5L207.4,192.6L207.3,190.2L209.1,190.4L211,191.3L212.5,190.7L214.8,188.5L216.2,189.6L218,190L220.1,189.5L221,188.6L222,186.2L223.6,184.2L224.9,184.4L225,185.5L225.9,184.3L227.1,184.1L227.8,184.8L232.7,180.9L233.3,179.6L234.5,178.9L238.4,179L239.9,176.7L241.5,176.4L242.3,175L244,176.8L246,175.3L247.5,175.5L248.9,174.5L251.2,175.8L252,175.4L253.4,172.5L254.7,172.2L255.2,173.2L256.6,174.4L258.2,174.5L258.9,173.5L262.2,173.9L264.5,175.2L265.4,178.5L262.3,179L261.1,180.5L259.8,181.3L257.3,181.6L257.6,184.4L256.7,187.4L258.6,187.9L261.1,190.1L262.7,190.3L262.3,192.1L261.5,193L262,194.5L260.1,196.1L259,197.7L258.5,197.4L257,198.7L257.3,200.7L256.1,202.8L255.2,205.4L254,207.3L254.6,209.6L255.7,209.6L256.3,211L255.6,214.8L256.1,216.9L255.9,219L254.2,219.7L254.9,220.3L255.1,222.4L254.7,223.8L253.2,224.5L252.6,226.7L251.5,228.2L250.8,232.2L249.9,232.7L250,236L247,237.7L247.3,239.1L250.6,241.1L250.1,241.6L251.6,246.5L251.4,249.6L250.6,251L250.9,253.1L249.5,256.2L249.6,257.9L248.1,261.5L247.2,262.1L245.7,261.5L243.9,262.9L243.8,263.9L240.5,263.4L240.4,265.2L241.4,265.7L241,267.1L239.6,267.9L240.2,269L239.7,270.7L240.2,271.4L238.3,273.3L236.4,272.5L232.8,273.3L229.8,272.8L229,275.4L227.8,276.3L227.9,277.1L226.1,278.9L228.6,280.6L227.7,282.2L225.4,282.9L223.1,284.3L222.5,282.7L223.1,282L222.2,280.6L221.1,280.6L217.1,279.3L215.8,279.6L214.5,279.9L213.3,279.1L212.4,279.4L210.7,278.7L206.8,278.7L206,279.8L203.9,279L200.8,279.3L199.2,277.7L198.8,273.9L196.9,270.4L196.9,269L198.4,266.7L198.3,265L199,263.4L197.6,261.4L196.3,262L193.2,261.3L191.3,259.9L187.1,260.1L187.1,259.1L185.5,257.4L184.9,258.7L183.8,259.2L182.1,258.7L181.1,260.1L178.3,260.1L177,259.3L177.3,257.6L176.2,257.3L175,258.8L174.2,256.7L174.9,254.4L176.4,251.5L176.6,250.1L175.4,246.3L175.5,244.1L176.2,242.7L177.6,242.9L177.5,240.1Z","c":[218.9,228]},"雲林縣":{"d":"M104.8,272L106.1,272.6L106.7,273.9L105,273.7L103.6,276.1L101.4,276.5L102.8,277.1L102.5,278.1L101.5,277L100.8,278.6L100.1,277.5L98.4,278.2L97.4,279.6L97.7,280.8L95.5,280.7L97.1,283.1L97,284.2L95.1,280.8L94.2,280.1L96.6,277.5ZM107.2,269.6L107.9,270.4L106.7,272.4L106.1,271.1ZM111.3,268.9L111.9,269.4L110.7,270.9ZM111.3,266.6L109.2,269L107.7,269.3L108.8,267.7L109.9,267.6ZM111.1,265.8L111.1,265.8L111.1,265.8ZM122.5,224.8L124.4,227.3L126.9,229.2L133.6,231.1L140.1,230.7L141.4,230L146.5,230.3L149.4,229.7L151.8,231.5L155.7,233L159.3,233.9L161.4,234L164.3,233.8L169.6,235.2L172.4,235.1L175.6,235.8L177.5,240.1L177.6,242.9L176.2,242.7L175.5,244.1L175.4,246.3L176.6,250.1L176.4,251.5L174.9,254.4L174.2,256.7L175,258.8L176.2,257.3L177.3,257.6L177,259.3L178.3,260.1L181.1,260.1L182.1,258.7L183.8,259.2L184.9,258.7L185.5,257.4L187.1,259.1L187.1,260.1L186.3,261.1L187.3,262L187.2,264.7L187.7,265.6L185.4,265.8L184.3,264.9L182.4,264.8L180.2,265.6L179.5,264.5L176.9,265.4L176,264.6L176.7,263.9L176.3,262.5L173.7,262.8L171.8,264L169.1,263.6L167.6,263.8L165,262.5L162.5,262.3L160.1,260L158.7,258L158.3,256.7L156.1,257.3L155.2,257L152.9,257.5L150.8,257.4L149,259L145.5,257.8L143.5,258.7L142.6,260.2L141,260.5L140.1,262.2L136.8,262.7L136.7,264.4L135.1,265.4L133.4,265.5L133.9,266.5L131.2,266.9L131.4,268.4L129.6,269.4L129,271.1L127.9,270.7L127,269L125.2,269.6L125.8,273.1L124.8,274.3L122.8,274.8L120.5,273.7L117.5,274L115.7,273L113,272.5L113.6,271L112.2,268.5L112.7,265.4L111.9,258.7L112.1,257.2L110.2,258.5L109.1,256.6L110.3,255.6L111.7,252.3L112.2,249.9L113,248.9L113.2,246.8L114.3,245.1L115.6,241.9L116,239.6L114.4,236.1L117.5,232.6L117.6,231.7L119,231.3L120.9,228.8L120.5,227.2L121.7,226.9Z","c":[141.8,249.6]},"基隆市":{"d":"M322.8,48.1L322.6,50.1L321.7,49.5L322.1,51.2L321.1,51.5L318.9,50.4L316.8,52L317.3,53.1L317.2,55.4L319.3,57.4L317.6,59.2L313.8,59.8L311.3,57.7L309.6,57.7L304.1,54.1L303.2,52.9L302.5,49.3L300.7,48.3L300.4,47.7L304.4,45.9L306.9,45.4L308.6,43.9L309.6,43.8L310.9,42.5L310.6,44L312.7,44.1L315.8,45.3L317.6,44.3L319.9,45L319,45.3L321.5,46.6L323.3,46.3ZM320.9,39.8L320.9,39.8L320.9,39.8Z","c":[312,50.8]},"臺北市":{"d":"M293.4,39.6L295,40L294.9,42.4L294.4,44L295.8,44.3L295.7,45.9L297.6,48.1L297.6,48.9L296.5,51.3L300.4,53.7L300.7,55.1L299.1,58.2L300.1,59.4L299.1,60.1L300.2,61.9L303.4,63.3L305.4,63L305.2,63.9L302.9,64.1L301,63.7L299.9,64.7L298.3,64.3L296.7,65.1L296.5,66.5L297.3,68.5L297.1,70.4L299.6,71.4L296.7,72.7L294.4,71.8L292.1,72.1L291.2,69.3L288.4,68.5L288.7,66.7L286.8,64.4L285.6,64.2L284.1,65.8L283,65L282.3,62.2L283,61.2L284.6,60.7L285.2,59.7L285.3,57.4L284.7,55.6L283,53.6L280.1,53L279,52.2L279.2,50L282.2,46.2L282.7,46.1L284.7,43L286.9,43.5L287.1,42.2L289.8,40.8L291.1,39.4L291.4,38L292.3,37.9Z","c":[291.1,55.5]},"新北市":{"d":"M343.4,69.5L343,68.9L340.6,68.8L340.2,69.3L335.4,70.7L333.6,72.3L331.4,72.6L330.1,72.2L328.3,72.7L327.6,73.6L327.4,75.2L328.3,75.8L329,77.8L326.4,80.4L324.7,80.7L323.8,80.2L320,82.6L320.5,84.7L319.3,86L318.5,85.9L317.4,87.2L315,87.8L313.8,87.3L312.5,88.1L308.1,91.7L308.4,92.7L306.4,93.1L305.8,92.6L304.7,93.6L303.1,93.1L302.7,93.8L300.3,93.9L300.3,95.8L298.3,95.9L296,96.8L296.7,98.9L295.8,101.8L296.7,105.1L295.5,106.2L294.2,106L293.9,107.6L293.3,107.1L289.9,108.2L289.1,110.6L287.4,111.3L285.9,111.2L283.5,112.7L281.9,112.6L281,110.4L281.1,109.5L278.1,108.2L276.2,104.4L274.7,100.2L278,97L276.6,95.7L276.4,93.4L274.7,91.5L274,91.5L273.7,90.1L272.1,89L270.9,88.9L268.9,90.3L266.4,89.6L263.8,88.3L265.7,88.2L266.4,87.7L264.9,85.6L266,84.9L264.9,83.9L264.4,82.2L263.3,82.3L261.7,81.1L262.4,79.8L261.3,78.8L263.4,77L261.9,77.2L261.1,75.8L263.1,74.7L262.6,74.3L262.5,70.3L264.5,69.6L267.8,70.4L269.9,69L269.8,67.8L271,68.1L272.2,67.3L270.9,65L273.3,64.5L271.5,63L271.7,60.9L270.6,58.6L268.8,57.9L266,58.1L264.6,56.7L265.4,55.8L264,55.5L262.2,54.2L259.4,53.7L258.9,52.6L258,52.8L256.9,51.8L257,50.7L260.3,49.6L261.6,49.9L265.9,48.8L270.4,46.5L270.7,43.7L272,45L274.1,42.4L272.3,41.6L272.4,40.6L274.1,40.4L274.1,39.3L275.7,37L276.5,36.5L278.4,31.8L280.8,31.4L282,29.3L285.5,27.6L285.9,26.4L286.5,27.3L288.6,26.6L289.1,25.2L289.6,26L292,26.3L294.2,25.4L296.7,26.4L298.1,27.8L300,28.9L301.4,30.8L301.3,33.5L302.5,34.9L303.7,34.6L303.4,36L304.1,37.4L306,38.8L308.1,38.5L309.2,37.2L309.2,38.7L307.9,40.7L308.8,42L310.9,42.5L309.6,43.8L308.6,43.9L306.9,45.4L304.4,45.9L300.4,47.7L300.7,48.3L302.5,49.3L303.2,52.9L304.1,54.1L309.6,57.7L311.3,57.7L313.8,59.8L317.6,59.2L319.3,57.4L317.2,55.4L317.3,53.1L316.8,52L318.9,50.4L321.1,51.5L322.1,51.2L321.7,49.5L322.6,50.1L322.8,48.1L323.7,48.6L325.7,48.2L324.9,49.1L325.2,50.2L326,49.4L327.5,49.2L331,50L332,49.6L334,50.4L338.4,49.2L337.2,50.9L338.4,52.1L337.5,52.9L336.8,54.6L337,56.3L338.6,57.3L339,58.4L338.8,61.6L341,64.2L344.3,63.5L346.4,64.2L346.6,65.4L347.4,64.4L348.5,65.6L348.3,66.9L347.2,67.1L345.6,68.5ZM293.4,39.6L292.3,37.9L291.4,38L291.1,39.4L289.8,40.8L287.1,42.2L286.9,43.5L284.7,43L282.7,46.1L282.2,46.2L279.2,50L279,52.2L280.1,53L283,53.6L284.7,55.6L285.3,57.4L285.2,59.7L284.6,60.7L283,61.2L282.3,62.2L283,65L284.1,65.8L285.6,64.2L286.8,64.4L288.7,66.7L288.4,68.5L291.2,69.3L292.1,72.1L294.4,71.8L296.7,72.7L299.6,71.4L297.1,70.4L297.3,68.5L296.5,66.5L296.7,65.1L298.3,64.3L299.9,64.7L301,63.7L302.9,64.1L305.2,63.9L305.4,63L303.4,63.3L300.2,61.9L299.1,60.1L300.1,59.4L299.1,58.2L300.7,55.1L300.4,53.7L296.5,51.3L297.6,48.9L297.6,48.1L295.7,45.9L295.8,44.3L294.4,44L294.9,42.4L295,40Z","c":[296.5,69]},"臺中市":{"d":"M261.3,145L262.6,146L262.6,151L264,152.1L266.1,151.7L267.3,152.3L268.4,155.2L269.4,155.3L272,153.6L272.7,153.9L276.5,153.1L277.2,154.5L277.8,154.2L278.3,155.6L277,156.5L276.3,158.1L275.9,160.5L276.2,161.5L274.5,163.6L272.4,163.5L272.1,165.2L269.3,167.5L269.9,170.9L267.5,171.3L266.8,172.4L265.7,172.4L265.7,173.8L264.5,175.2L262.2,173.9L258.9,173.5L258.2,174.5L256.6,174.4L255.2,173.2L254.7,172.2L253.4,172.5L252,175.4L251.2,175.8L248.9,174.5L247.5,175.5L246,175.3L244,176.8L242.3,175L241.5,176.4L239.9,176.7L238.4,179L234.5,178.9L233.3,179.6L232.7,180.9L227.8,184.8L227.1,184.1L225.9,184.3L225,185.5L224.9,184.4L223.6,184.2L222,186.2L221,188.6L220.1,189.5L218,190L216.2,189.6L214.8,188.5L212.5,190.7L211,191.3L209.1,190.4L207.3,190.2L207.4,192.6L205.7,194.5L206.1,192.3L205,190L203.1,190L202.6,189L201.5,189L200.4,190L199.4,193.1L199.5,196.3L196.7,197.3L196.3,198.8L193.9,202.9L192.2,204.2L192.1,205L190.5,205.4L189,206.4L187.2,205L185.6,204.9L184,205.5L180.5,204.3L177.5,202L176.4,201.5L176.2,202.6L175.1,201.9L173.7,202.1L174.1,200.9L173.5,198.9L173.7,196.7L172.4,194.6L172.1,192L167,191.2L164.1,190.5L161.9,188.6L160.8,186.7L161,185.1L158.9,180.3L158.4,179.7L152.4,177.5L153.9,176.5L154.9,175.1L156.6,170.8L157,169.3L157.6,169.6L159.2,165.7L160,164.8L160.9,162.4L161.9,161.8L163,159.7L163.6,159.8L165.3,157.7L165.8,156.1L169.2,150.8L170.4,149.6L173.3,145.1L175.5,146.9L176.7,149.4L178.6,150.4L182.1,155.1L184.1,156.6L187,157.4L190.6,160.7L193.8,162.1L196.5,162.4L198,163.6L200.1,166L203.1,166.1L205.3,165.3L209,165.7L211.3,164.1L210.5,159.9L213,158.7L215.7,159.2L216.1,159.8L218.8,159.6L220,160.5L221.7,160.2L223.4,163.1L225.6,165L227.7,164.8L228.1,163.2L231.4,161.3L232.1,162.2L234.9,160.3L236.5,160.4L237,158.8L239,156.3L242.4,156.2L243.1,154.5L245.2,153.3L246.1,151.2L247.3,151L248.4,153.6L250.4,153L250.8,151.1L252,149.9L252,147.9L253.7,147.3L253.9,145.5L254.1,146.8L259.8,146.2Z","c":[207.5,173.2]},"臺南市":{"d":"M177.3,313.3L177.6,314.3L176,316.3L175.1,318.1L175.7,319.1L173.4,321.7L172.6,321.8L172,323.4L170.7,324.4L169,327.4L169,328.5L167.2,331.2L167.3,331.7L164.7,334.8L162.7,335.9L158.3,340.3L155.7,342.1L155.3,343.8L152.9,343.7L152.7,345.6L152.2,345.4L151.9,347.3L150.9,347L149.4,350.3L148.8,352.4L147.3,355.7L146.4,356.1L145.1,354.9L142.9,355.1L141.8,356.7L140.1,357.8L139.4,359.3L136.7,359.4L135.6,357.9L134.5,358.1L129.8,357.4L130,358.5L127.6,357.7L126.7,358.8L125.3,357.5L124.1,357.2L123.9,355.9L122.4,356.7L118.9,355.1L116.7,356.4L116.7,353.4L116.3,351.1L115.2,349L114.2,349.1L114.7,347.7L112.1,344.7L108.5,341.6L105.6,339.7L102.4,338.1L101.9,338.3L99.5,334.9L98.2,335.1L98.1,333.9L99,330.1L100.1,327.8L101.2,326.9L102.6,320.7L104.4,316.6L104.9,313.6L104.8,311.5L105.9,309.9L106.4,307.7L106.8,303.1L108.6,301.5L108.6,298.6L109.5,297.4L113.4,300.2L113.4,300.9L115.6,301.8L116.8,303.7L118.5,304.3L118.4,302.8L120.4,304.1L122.5,303.5L124.7,299.2L126.9,298.7L128.4,297.3L127.6,296.8L128.2,295.7L129.5,296.3L130.8,296L130.7,293.7L131.7,292.6L133.9,292.5L133.9,291.1L136.7,291.1L138.8,289L142.8,288.7L147,287.6L147.7,288.6L150.1,287.3L154.5,289.4L155.2,290.9L156.7,289.8L157.8,290.8L155.9,292L156.4,292.9L159.2,294.1L159.4,295.3L158.3,295.9L158.8,297L159.8,296.9L162.1,297.9L162.9,299.1L160.7,301.3L161.1,304L160.6,304.6L160.7,306.5L161.9,309.1L161.6,310.1L160.3,311.3L161.2,312.5L163.1,312.9L164.8,314.3L166.1,313.8L167.7,314.7L168.8,313.4L169.5,311.2L170.2,312.7L171.7,313.6L174.1,312.7Z","c":[135.7,323.5]},"桃園市":{"d":"M281.9,112.6L279.3,112.7L278,114.3L278.2,115.8L276.2,119.5L275.3,122.1L273.3,122.4L272.1,124.1L270.2,124.8L268.3,123.8L267.1,122.5L266.5,120.5L267.5,118.5L266.4,118.3L265.7,116.9L265.9,113.5L264.2,113.7L264,111.9L262.8,110.2L261.4,109.3L259.6,110L259,109.6L260.1,106.2L258.8,104.4L260.1,101.3L259.3,100.2L256.2,99.1L254,97.6L254.2,96.4L252.5,95.5L251.9,93.9L249.2,95.1L248.6,93.3L247.4,94.1L247.2,93.2L244.3,91.6L243.4,90.6L240.1,88.9L241.5,86.8L240.8,83.8L238.7,83.6L238.3,84.2L234.9,83.1L234.9,81.4L232.7,82L231.7,81.3L230.1,81.2L228.4,80.3L228.8,78.3L228.5,76L225.9,74.7L223.6,75.5L222,74.7L220.2,76.2L218.9,75.5L222.4,70.7L222.3,68.5L223.2,67.8L223.7,66L224.7,64.3L227.7,61.1L232.1,59.3L232.5,58.4L236.9,56.4L241,55.4L244.5,53.8L248,51.8L251.4,51L254,49.9L257,50.7L256.9,51.8L258,52.8L258.9,52.6L259.4,53.7L262.2,54.2L264,55.5L265.4,55.8L264.6,56.7L266,58.1L268.8,57.9L270.6,58.6L271.7,60.9L271.5,63L273.3,64.5L270.9,65L272.2,67.3L271,68.1L269.8,67.8L269.9,69L267.8,70.4L264.5,69.6L262.5,70.3L262.6,74.3L263.1,74.7L261.1,75.8L261.9,77.2L263.4,77L261.3,78.8L262.4,79.8L261.7,81.1L263.3,82.3L264.4,82.2L264.9,83.9L266,84.9L264.9,85.6L266.4,87.7L265.7,88.2L263.8,88.3L266.4,89.6L268.9,90.3L270.9,88.9L272.1,89L273.7,90.1L274,91.5L274.7,91.5L276.4,93.4L276.6,95.7L278,97L274.7,100.2L276.2,104.4L278.1,108.2L281.1,109.5L281,110.4Z","c":[253.8,80.7]},"苗栗縣":{"d":"M253.9,145.5L253.7,147.3L252,147.9L252,149.9L250.8,151.1L250.4,153L248.4,153.6L247.3,151L246.1,151.2L245.2,153.3L243.1,154.5L242.4,156.2L239,156.3L237,158.8L236.5,160.4L234.9,160.3L232.1,162.2L231.4,161.3L228.1,163.2L227.7,164.8L225.6,165L223.4,163.1L221.7,160.2L220,160.5L218.8,159.6L216.1,159.8L215.7,159.2L213,158.7L210.5,159.9L211.3,164.1L209,165.7L205.3,165.3L203.1,166.1L200.1,166L198,163.6L196.5,162.4L193.8,162.1L190.6,160.7L187,157.4L184.1,156.6L182.1,155.1L178.6,150.4L176.7,149.4L175.5,146.9L173.3,145.1L178.8,139.1L179.2,136.9L181.2,133.9L182.3,130L183.3,128.3L184.4,124.2L185.2,122.8L187,121.4L188,120L189,119.9L190.2,118.5L190.5,117.1L192.8,114.5L194.4,113.6L198.7,112.8L202.9,108.7L203.6,106L205.2,103.7L206.1,104.4L208.1,104.4L209.2,103.3L210.5,106L210.2,106.6L213,107.3L213.8,108L214.8,107.4L215.2,108.4L216.4,107.5L217.8,107.4L218.2,108.1L216.6,111.3L217.8,111L218.2,112.4L220.8,115.3L222.4,115.1L222.2,116.8L224.3,117.2L224.8,118.4L226.6,119.1L227.9,120.8L228.9,119.9L230.5,121.1L231.4,122.8L231.6,124.4L230.7,125.6L230.1,128L229,128.9L231.3,131.1L230.9,132.9L229.6,133.6L230.2,137.1L232,136.7L233.5,137.3L236.8,135.4L238.5,135.9L239.5,135.2L242.6,136.5L243.6,135.8L244.8,136.1L246.5,135.2L248.7,134.9L249.2,135.8L248.8,137.1L250.8,138.5L252.1,141L253.8,142L254.4,143.1Z","c":[211.3,139.1]},"嘉義市":{"d":"M151.2,272.9L152.3,273.2L153.1,275.3L154.5,274.4L155.9,275.2L156.5,276.6L157.9,276.6L158.1,278L159,278.8L157.8,280.2L157.2,281.9L156.5,281.9L154.9,280.6L153.9,280.7L151.9,283L150.2,283.7L148.9,280.7L147.1,280.8L146.6,280.2L144.5,280.5L145.1,278.3L143.8,275.6L146.3,274.5L146.3,275.6L147.3,274.6L149.4,274.1L149.5,273Z","c":[151.3,278]},"嘉義縣":{"d":"M113.8,290.2L113.8,290.2L113.8,290.2ZM187.1,260.1L191.3,259.9L193.2,261.3L196.3,262L197.6,261.4L199,263.4L198.3,265L198.4,266.7L196.9,269L196.9,270.4L198.8,273.9L199.2,277.7L200.8,279.3L203.9,279L206,279.8L206.8,278.7L210.7,278.7L212.4,279.4L213.3,279.1L214.5,279.9L215.8,279.6L213.1,280.4L212.1,281.3L210.1,281.1L207.4,282.7L206.8,284.3L205.4,284.6L204,285.9L202,286.5L202.1,287.4L199.7,291L199.4,292.6L196.4,293.7L194.4,295.7L193.7,297.1L190.5,296.8L190.6,298L189.2,299.9L187.3,301L187,302.2L184.7,301.7L183.7,302.7L183.1,305.1L179.5,304.3L176.4,303.3L175.8,304.7L176,306.3L175.4,307.2L176.7,310.2L177.3,313.3L174.1,312.7L171.7,313.6L170.2,312.7L169.5,311.2L168.8,313.4L167.7,314.7L166.1,313.8L164.8,314.3L163.1,312.9L161.2,312.5L160.3,311.3L161.6,310.1L161.9,309.1L160.7,306.5L160.6,304.6L161.1,304L160.7,301.3L162.9,299.1L162.1,297.9L159.8,296.9L158.8,297L158.3,295.9L159.4,295.3L159.2,294.1L156.4,292.9L155.9,292L157.8,290.8L156.7,289.8L155.2,290.9L154.5,289.4L150.1,287.3L147.7,288.6L147,287.6L142.8,288.7L138.8,289L136.7,291.1L133.9,291.1L133.9,292.5L131.7,292.6L130.7,293.7L130.8,296L129.5,296.3L128.2,295.7L127.6,296.8L128.4,297.3L126.9,298.7L124.7,299.2L122.5,303.5L120.4,304.1L118.4,302.8L118.5,304.3L116.8,303.7L115.6,301.8L113.4,300.9L113.4,300.2L109.5,297.4L110.8,294.2L111.2,291.3L114.5,291.2L115.3,290.1L114.8,288.3L113.7,289.2L113.3,287.1L113.7,285.6L113,285.2L114.1,282.6L113.7,281.5L111.4,282L112.9,280.9L112.8,279.5L114.3,277.6L114.6,276L111.5,277L109.7,276L109.6,273.3L110.7,272.6L112.6,273L113,272.5L115.7,273L117.5,274L120.5,273.7L122.8,274.8L124.8,274.3L125.8,273.1L125.2,269.6L127,269L127.9,270.7L129,271.1L129.6,269.4L131.4,268.4L131.2,266.9L133.9,266.5L133.4,265.5L135.1,265.4L136.7,264.4L136.8,262.7L140.1,262.2L141,260.5L142.6,260.2L143.5,258.7L145.5,257.8L149,259L150.8,257.4L152.9,257.5L155.2,257L156.1,257.3L158.3,256.7L158.7,258L160.1,260L162.5,262.3L165,262.5L167.6,263.8L169.1,263.6L171.8,264L173.7,262.8L176.3,262.5L176.7,263.9L176,264.6L176.9,265.4L179.5,264.5L180.2,265.6L182.4,264.8L184.3,264.9L185.4,265.8L187.7,265.6L187.2,264.7L187.3,262L186.3,261.1ZM151.2,272.9L149.5,273L149.4,274.1L147.3,274.6L146.3,275.6L146.3,274.5L143.8,275.6L145.1,278.3L144.5,280.5L146.6,280.2L147.1,280.8L148.9,280.7L150.2,283.7L151.9,283L153.9,280.7L154.9,280.6L156.5,281.9L157.2,281.9L157.8,280.2L159,278.8L158.1,278L157.9,276.6L156.5,276.6L155.9,275.2L154.5,274.4L153.1,275.3L152.3,273.2Z","c":[160.4,282.4]},"高雄市":{"d":"M215.8,279.6L217.1,279.3L221.1,280.6L222.2,280.6L223.1,282L222.5,282.7L223.1,284.3L222.9,284.9L224.8,286L224.5,288.3L223,289.6L221.3,290.3L222.1,291.3L221.1,291.6L219.6,293.2L219.5,294.8L221.1,295.1L222.4,296.6L223.7,296L224.3,297.4L227.3,299.5L227,301.7L225.2,302.4L224.7,303.3L222.5,303.9L219.4,305.6L217.4,305.6L213.3,310.5L211.9,310.6L210.4,311.5L210,312.8L210,315.3L209.3,317.2L210,318.5L209.6,319.5L208.3,320L207.8,322.1L205.5,323.5L206.7,324.3L206.9,325.5L206.6,327.7L207.1,330.4L206.3,332.8L204.6,336L206.1,338.2L205.9,339.5L203.8,339.8L203.5,343.1L201.2,345.4L201,346.4L199.9,347L199.6,348.4L198.5,349.6L198.9,350.8L198.6,353.2L200,356.3L199.4,357.3L200.7,360.1L204,361.8L203.3,363L204.6,363.7L204,365.8L202.5,363.8L201.8,364.6L200,362.6L198.7,362.7L196,364.7L195,364.6L194.9,365.9L193.1,366.9L191.3,364.9L191,363.9L188.6,361.6L185.8,360.4L184.2,360.5L182.2,362.3L180.5,363.1L180.2,363.8L178.2,363.5L177.9,360.8L176.6,361.1L176.2,360L173.1,361.3L171.2,361.6L167.3,365.1L164.7,367.7L162.5,367.7L161.7,367.2L159.1,367.8L156.9,366.8L154.8,366.5L153.9,367.5L153.3,371.7L152.5,373.7L152,377.7L152.3,382.9L151.2,387L150.2,388.4L149.8,390.2L149.7,395L149.5,396.7L151,399.3L151.2,401L150.6,404.3L149.8,406.3L149.2,406.7L148.1,410.3L148.5,413.1L148.3,417.1L145.4,416.4L141.8,414L136.8,409.9L136.8,408.9L134.1,410.8L131.7,407.6L133.5,408L134.7,409.5L135.3,409L133.5,406.6L132.4,406.3L132.9,404.9L128,398.9L128.2,397.7L127,396.7L127.9,395.8L126.2,392.2L126.4,390.6L128,388.8L127.8,385.7L127,382.9L126.3,381.7L121.5,370.7L119.6,371L118.7,369.6L120.6,368.9L119.8,365.7L118.6,363.4L119,362.8L116.7,356.4L118.9,355.1L122.4,356.7L123.9,355.9L124.1,357.2L125.3,357.5L126.7,358.8L127.6,357.7L130,358.5L129.8,357.4L134.5,358.1L135.6,357.9L136.7,359.4L139.4,359.3L140.1,357.8L141.8,356.7L142.9,355.1L145.1,354.9L146.4,356.1L147.3,355.7L148.8,352.4L149.4,350.3L150.9,347L151.9,347.3L152.2,345.4L152.7,345.6L152.9,343.7L155.3,343.8L155.7,342.1L158.3,340.3L162.7,335.9L164.7,334.8L167.3,331.7L167.2,331.2L169,328.5L169,327.4L170.7,324.4L172,323.4L172.6,321.8L173.4,321.7L175.7,319.1L175.1,318.1L176,316.3L177.6,314.3L177.3,313.3L176.7,310.2L175.4,307.2L176,306.3L175.8,304.7L176.4,303.3L179.5,304.3L183.1,305.1L183.7,302.7L184.7,301.7L187,302.2L187.3,301L189.2,299.9L190.6,298L190.5,296.8L193.7,297.1L194.4,295.7L196.4,293.7L199.4,292.6L199.7,291L202.1,287.4L202,286.5L204,285.9L205.4,284.6L206.8,284.3L207.4,282.7L210.1,281.1L212.1,281.3L213.1,280.4Z","c":[172.7,344.8]},"臺東縣":{"d":"M298.5,489L297.5,487.8L298.9,487.4ZM285,469.6L286.1,470.2L292.8,469.7L293.4,472.4L294,473L292.5,473.8L293,475.6L294.4,476.8L296.6,477.8L297.3,479.1L296.2,481L294.5,480.5L293.3,480.9L292.3,478.8L290.6,477.7L289.3,477.9L285.7,474.7L285.5,471.6L284.3,470.2ZM283.3,388.5L285.7,388.6L285.8,389.6L284.3,392.8L285,394.2L283.8,394.7L282.6,393.1L281,392.8L281.3,391.1L280,389.5L280.1,388.7L281.8,389ZM204,365.8L204.6,363.7L203.3,363L204,361.8L200.7,360.1L199.4,357.3L200,356.3L198.6,353.2L198.9,350.8L198.5,349.6L199.6,348.4L199.9,347L201,346.4L201.2,345.4L203.5,343.1L203.8,339.8L205.9,339.5L206.1,338.2L204.6,336L206.3,332.8L207.1,330.4L206.6,327.7L206.9,325.5L206.7,324.3L205.5,323.5L207.8,322.1L208.3,320L209.6,319.5L210,318.5L209.3,317.2L210,315.3L210,312.8L210.4,311.5L211.9,310.6L213.3,310.5L217.4,305.6L219.4,305.6L222.5,303.9L224.7,303.3L226.1,302.8L228.3,304.3L229,305.8L229,307.6L231.2,312.2L232.8,312L234.9,313.5L237.5,313.5L238.8,316.5L240.7,316.8L241.5,315.9L243.3,315.3L245.3,316.4L246.2,318.3L246.3,320.1L248,322.9L247.9,324.4L250.4,325.1L251.3,326.5L252.7,326.2L254.9,328.5L254.6,329.9L255.6,330.8L257.1,329.6L259.5,328.9L261.1,329L261.9,328.1L261.7,325.3L262.5,323.3L261.3,321.6L262.1,319.7L263.5,319.8L264.4,317.3L265,314.3L266.3,313.4L265.7,312.4L266.9,310.3L266.6,309.4L269,307.1L268.7,303.5L270.2,301.5L270.5,300.1L271.5,300L273,296.6L274.6,294.7L272.5,293.9L271.7,291.2L273.1,289.3L274.2,286.5L276,284.6L276.9,284.4L277.6,283.2L279.6,283.7L281,283.6L282.2,285L283.9,284.4L281.6,289.8L280.9,293.1L280.9,295.7L280.3,296.7L280.3,298.5L279.6,301.2L277.7,301.7L275.5,305.5L275.2,307.6L274.4,308.8L273.6,311.9L274.3,313.1L272.9,314.9L271.5,315.6L271.5,318.7L272.2,319.6L272.7,321.9L271.7,325.6L273.4,327.2L272.6,328.3L271.1,328.6L269.6,331.1L267.6,331L266.1,333.3L264,339.5L263.8,341.5L262.7,342.1L262,343.6L262.1,345.1L261.2,346.8L258.5,350.5L257.1,351.2L256.4,353.6L255.1,356.4L254.3,357.1L252.4,360.5L251.5,360.8L250.5,362.9L249.7,362.5L247.6,363L245.4,364.9L244.7,367.2L245.5,368.2L246.5,371.9L245.8,373L244.1,374L243.5,377.2L241,378.9L237.3,382.8L233.9,384.7L231.4,385.7L228.1,388.7L226.1,389.5L224.4,391.5L222.7,396.5L222.3,400.7L219.3,403.3L218.2,405.4L216,412.2L214.3,418.7L212.7,423.4L210.4,428.6L209.6,432.1L208.8,433L207.8,435.5L207.5,438.1L207.4,443.3L208,447.5L206.1,449.1L204.3,449.8L203.2,448.3L200.8,447.9L197.7,445.2L195.8,446.1L195.6,443.4L196.7,443.3L196.5,442.4L195,442.2L194.4,441L193,440.5L193.1,439L194.2,439L195.4,437.7L194.9,435.3L193.9,434L191.8,433.7L191.2,432.1L188.7,431L189.8,427.6L190.5,426.8L189.9,425.8L192.5,425.6L194.5,424.1L192.7,420.5L192.8,419.6L189.7,418.5L190.1,416.6L189.6,415.7L191.2,414L191.1,412.7L190,411.4L189.5,408.2L188.2,405.8L188.4,403.4L189.2,403.1L189,400.7L190.1,398.9L189.9,397.5L190.9,395L194.1,390.5L194.8,388.3L194.1,386.4L195.5,386.9L198.2,386.7L198.3,386L200.7,385.5L202,383.1L206.4,383.1L207.8,380.3L207.7,376.3L209,375L208.9,371.7L207.4,370.1L204.5,369.4L203.6,368Z","c":[226.4,363.1]},"花蓮縣":{"d":"M278.3,155.6L280,156.9L282.6,157.9L284.2,159.2L285,158.7L289.5,159.6L291.5,160.3L292,161.5L295.7,162.7L297.9,162.9L296.6,160.7L298,159.7L299,160L299.3,158.4L301.2,159.8L301,158.5L299.9,156.8L299.8,155.4L301,154.8L303.2,157.8L305.1,157.8L306.7,159.4L307.7,159L308.4,160L309.4,159.9L311.5,160.9L315.4,161.5L317.2,162.7L319.1,162.5L318.5,164.3L315.8,167.4L315.3,170L313.3,172.2L311.7,172.7L310.5,175L306.4,177.5L305.1,179.3L304.5,182.4L305.2,184.7L305.1,187.6L304,189.4L301.3,191.3L299.5,193.8L299.1,197.7L300.9,202L302.6,203.6L303.1,205L302.1,206.9L300.6,210.5L299.9,209.3L298.1,211.7L298.6,215.5L297.7,218.6L297.8,220.2L296.8,226L294.1,232.4L293.4,236.4L293.7,239.1L293.2,240.9L292,243.7L291,244.6L290.6,246.1L291.2,248L290.2,251.2L289.9,253.8L288.9,255.3L288.4,257.9L288.2,261.9L287.7,264.8L285.8,268.3L284.9,273L285.4,276.6L286.2,277.1L284.4,281.4L283.9,284.4L282.2,285L281,283.6L279.6,283.7L277.6,283.2L276.9,284.4L276,284.6L274.2,286.5L273.1,289.3L271.7,291.2L272.5,293.9L274.6,294.7L273,296.6L271.5,300L270.5,300.1L270.2,301.5L268.7,303.5L269,307.1L266.6,309.4L266.9,310.3L265.7,312.4L266.3,313.4L265,314.3L264.4,317.3L263.5,319.8L262.1,319.7L261.3,321.6L262.5,323.3L261.7,325.3L261.9,328.1L261.1,329L259.5,328.9L257.1,329.6L255.6,330.8L254.6,329.9L254.9,328.5L252.7,326.2L251.3,326.5L250.4,325.1L247.9,324.4L248,322.9L246.3,320.1L246.2,318.3L245.3,316.4L243.3,315.3L241.5,315.9L240.7,316.8L238.8,316.5L237.5,313.5L234.9,313.5L232.8,312L231.2,312.2L229,307.6L229,305.8L228.3,304.3L226.1,302.8L224.7,303.3L225.2,302.4L227,301.7L227.3,299.5L224.3,297.4L223.7,296L222.4,296.6L221.1,295.1L219.5,294.8L219.6,293.2L221.1,291.6L222.1,291.3L221.3,290.3L223,289.6L224.5,288.3L224.8,286L222.9,284.9L223.1,284.3L225.4,282.9L227.7,282.2L228.6,280.6L226.1,278.9L227.9,277.1L227.8,276.3L229,275.4L229.8,272.8L232.8,273.3L236.4,272.5L238.3,273.3L240.2,271.4L239.7,270.7L240.2,269L239.6,267.9L241,267.1L241.4,265.7L240.4,265.2L240.5,263.4L243.8,263.9L243.9,262.9L245.7,261.5L247.2,262.1L248.1,261.5L249.6,257.9L249.5,256.2L250.9,253.1L250.6,251L251.4,249.6L251.6,246.5L250.1,241.6L250.6,241.1L247.3,239.1L247,237.7L250,236L249.9,232.7L250.8,232.2L251.5,228.2L252.6,226.7L253.2,224.5L254.7,223.8L255.1,222.4L254.9,220.3L254.2,219.7L255.9,219L256.1,216.9L255.6,214.8L256.3,211L255.7,209.6L254.6,209.6L254,207.3L255.2,205.4L256.1,202.8L257.3,200.7L257,198.7L258.5,197.4L259,197.7L260.1,196.1L262,194.5L261.5,193L262.3,192.1L262.7,190.3L261.1,190.1L258.6,187.9L256.7,187.4L257.6,184.4L257.3,181.6L259.8,181.3L261.1,180.5L262.3,179L265.4,178.5L264.5,175.2L265.7,173.8L265.7,172.4L266.8,172.4L267.5,171.3L269.9,170.9L269.3,167.5L272.1,165.2L272.4,163.5L274.5,163.6L276.2,161.5L275.9,160.5L276.3,158.1L277,156.5Z","c":[269,240.5]},"澎湖縣":{"d":"M23.8,313.8L24.1,316.7L22.4,317.2L22.5,318.6L21,317.3L21.3,316.3L20.1,315.1L20.5,314.3ZM46,309.3L46.1,310.7L45.1,309.6ZM53.8,307.9L53.1,310.6L52.2,309.7L52.4,308.3ZM51.7,307.8L51.7,307.8L51.7,307.8ZM33.8,307.8L33.8,307.8L33.8,307.8ZM32.2,306.7L32.2,306.7L32.2,306.7ZM10.6,299.9L10.6,299.9L10.6,299.9ZM36,292.6L36.9,294L35.5,293.7L33.9,294.5L33.8,293.7ZM30.5,289.5L31.5,290.7L32.3,290.4L32.4,293L33.4,293.6L32.3,294L33,295.7L29.6,295.2L30.6,293.9L30.3,292L30.8,290.9ZM8.5,287.5L9.9,288.5L7.9,289.2ZM36.5,275.9L35,277.2L32.7,277.7L33.9,276.4ZM33.9,273.3L33.9,273.3L33.9,273.3ZM40.3,259.1L40.3,259.1L40.3,259.1ZM48.3,254.4L48.3,254.4L48.3,254.4ZM52.1,251.9L52.4,253.3L51,253.1ZM38.4,251L38.4,251L38.4,251ZM42,251L43.9,251.4L45.5,254.3L43.7,255.9L44.7,258.7L45.7,258.9L45.2,260.1L45.6,261.3L47,260.4L47.1,264.3L47.6,264.3L49,261.7L49.2,263.1L50.4,260.2L51.9,262.8L52.7,261.3L54.2,263.6L54.2,265.3L55.8,267.8L53.9,268.3L53.6,267.1L49.9,267L45.6,270.3L44.7,271.4L45.4,272.8L44.8,274.3L42.6,273.6L40.4,274.2L40.7,272.9L39.8,271.8L38.5,272.1L37.7,270.3L36.5,270L36.6,268.7L37.9,268.7L38.5,270.1L38.2,271.3L40.4,270.9L40.7,272.6L41.5,271L43.4,271.7L43.3,270.3L44.4,269.8L43.9,268.4L43,268.1L40.6,269L39.2,268.5L39.3,267.4L40.3,268.1L41.4,266.6L40.7,266L38.9,266.8L39.7,265.2L39.2,263.6L40.7,263.7L41.8,262.8L42.4,265.4L43.6,265.8L44,263.7L44.8,263.6L44.3,261.5L45.2,260.1L43.7,259.4L44.7,258.8L43.3,258.1L43.2,255.8L41.7,254.3L41.6,253.1L40.3,252.9L39.3,254.5L38.2,253.6L36.7,255.6L36.4,256.9L33.5,257.9L34.2,261.3L32.9,262.6L33.2,266.5L31,266L30,266.7L27.2,266.9L29.2,265L30.5,265.6L31.7,264.4L31.9,263.3L30,262.2L32.4,259.7L31.2,258.8L32.8,255L33.8,255L33.1,253.9L34.4,253.8L33.8,255.4L35.2,256.1L36.4,256L38.1,253.6L38.3,252.1ZM45.2,246.3L45.2,246.3L45.2,246.3ZM37.9,244.9L37.9,244.9L37.9,244.9ZM45.5,240L46.9,241.8L45.5,242L44.4,243.3L43.4,242.5ZM44.8,237.3L43.9,239.7L43.9,238.1Z","c":[40.9,269]},"新竹市":{"d":"M213,107.3L210.2,106.6L210.5,106L209.2,103.3L208.1,104.4L206.1,104.4L205.2,103.7L208.2,100L207.6,99.3L207.5,96.2L208.8,91.7L210.5,89.3L210.5,87.7L211.7,87.4L213.6,88.1L214.1,89.3L215.5,90.3L221.2,92L223.8,94.8L224.3,97.9L225.3,100.4L223.8,101.1L222.8,99.1L220.2,97.8L219.2,98.4L219.5,99.5L218.5,100.2L217.3,99.9L215.3,103L214.3,102.7L213.3,104.9Z","c":[214.3,96.9]},"新竹縣":{"d":"M272.1,124.1L273.3,126.7L272.2,127.2L271.1,129.1L272,132.8L270.7,133.5L269.7,135.4L268.4,135.5L268,137.1L266.4,138.7L264.5,139.4L263.6,141.4L262.1,142.9L261.3,145L259.8,146.2L254.1,146.8L253.9,145.5L254.4,143.1L253.8,142L252.1,141L250.8,138.5L248.8,137.1L249.2,135.8L248.7,134.9L246.5,135.2L244.8,136.1L243.6,135.8L242.6,136.5L239.5,135.2L238.5,135.9L236.8,135.4L233.5,137.3L232,136.7L230.2,137.1L229.6,133.6L230.9,132.9L231.3,131.1L229,128.9L230.1,128L230.7,125.6L231.6,124.4L231.4,122.8L230.5,121.1L228.9,119.9L227.9,120.8L226.6,119.1L224.8,118.4L224.3,117.2L222.2,116.8L222.4,115.1L220.8,115.3L218.2,112.4L217.8,111L216.6,111.3L218.2,108.1L217.8,107.4L216.4,107.5L215.2,108.4L214.8,107.4L213.8,108L213,107.3L213.3,104.9L214.3,102.7L215.3,103L217.3,99.9L218.5,100.2L219.5,99.5L219.2,98.4L220.2,97.8L222.8,99.1L223.8,101.1L225.3,100.4L224.3,97.9L223.8,94.8L221.2,92L215.5,90.3L214.1,89.3L213.6,88.1L211.7,87.4L213.4,85.7L215.1,81.8L215.9,80.7L217.3,77.1L218.9,75.5L220.2,76.2L222,74.7L223.6,75.5L225.9,74.7L228.5,76L228.8,78.3L228.4,80.3L230.1,81.2L231.7,81.3L232.7,82L234.9,81.4L234.9,83.1L238.3,84.2L238.7,83.6L240.8,83.8L241.5,86.8L240.1,88.9L243.4,90.6L244.3,91.6L247.2,93.2L247.4,94.1L248.6,93.3L249.2,95.1L251.9,93.9L252.5,95.5L254.2,96.4L254,97.6L256.2,99.1L259.3,100.2L260.1,101.3L258.8,104.4L260.1,106.2L259,109.6L259.6,110L261.4,109.3L262.8,110.2L264,111.9L264.2,113.7L265.9,113.5L265.7,116.9L266.4,118.3L267.5,118.5L266.5,120.5L267.1,122.5L268.3,123.8L270.2,124.8Z","c":[241.8,111.6]},"屏東縣":{"d":"M142.6,432.6L143.7,433.3L143.6,434.5L141.1,436.6L139.5,437L139.3,436.2L140.5,434.7L140.3,433.9ZM148.3,417.1L148.5,413.1L148.1,410.3L149.2,406.7L149.8,406.3L150.6,404.3L151.2,401L151,399.3L149.5,396.7L149.7,395L149.8,390.2L150.2,388.4L151.2,387L152.3,382.9L152,377.7L152.5,373.7L153.3,371.7L153.9,367.5L154.8,366.5L156.9,366.8L159.1,367.8L161.7,367.2L162.5,367.7L164.7,367.7L167.3,365.1L171.2,361.6L173.1,361.3L176.2,360L176.6,361.1L177.9,360.8L178.2,363.5L180.2,363.8L180.5,363.1L182.2,362.3L184.2,360.5L185.8,360.4L188.6,361.6L191,363.9L191.3,364.9L193.1,366.9L194.9,365.9L195,364.6L196,364.7L198.7,362.7L200,362.6L201.8,364.6L202.5,363.8L204,365.8L203.6,368L204.5,369.4L207.4,370.1L208.9,371.7L209,375L207.7,376.3L207.8,380.3L206.4,383.1L202,383.1L200.7,385.5L198.3,386L198.2,386.7L195.5,386.9L194.1,386.4L194.8,388.3L194.1,390.5L190.9,395L189.9,397.5L190.1,398.9L189,400.7L189.2,403.1L188.4,403.4L188.2,405.8L189.5,408.2L190,411.4L191.1,412.7L191.2,414L189.6,415.7L190.1,416.6L189.7,418.5L192.8,419.6L192.7,420.5L194.5,424.1L192.5,425.6L189.9,425.8L190.5,426.8L189.8,427.6L188.7,431L191.2,432.1L191.8,433.7L193.9,434L194.9,435.3L195.4,437.7L194.2,439L193.1,439L193,440.5L194.4,441L195,442.2L196.5,442.4L196.7,443.3L195.6,443.4L195.8,446.1L197.7,445.2L200.8,447.9L203.2,448.3L204.3,449.8L206.1,449.1L208,447.5L208.4,449.3L207.8,450.6L208,453.4L207.3,454.5L207.7,457L207.5,460.7L208,462L206.8,463.5L207.5,466.2L208.7,466.8L207.7,469.1L207.7,474.4L208.6,476.7L207.1,477.7L206.8,479L205.7,479.7L205.4,481.4L203.6,482.5L202,482.8L201.1,486.7L202,490.2L203.7,492.4L204.3,494.5L203.2,495.4L202.3,495.3L201.7,493L200.5,492.7L198.6,490.2L197.5,490.3L195.4,489.1L193.7,488.9L191.3,486.8L189.9,487.3L189,488.9L189.1,490.2L188.2,492.2L186.8,492.3L184.5,490.2L184.9,483.8L183.9,482.1L182.4,480.9L181.3,477.9L182.5,475.4L182.9,473.7L183.7,473.6L183.9,471.5L183.1,469.9L185.3,468.5L184.3,464.4L182.9,462L183.1,460.7L181.8,455.5L181.1,454.1L181.2,452.5L179.6,450.2L179.6,449.3L177.8,448L176.7,446.3L177.1,444.6L175.9,441.4L175.9,440L175.1,438.5L171.2,434.4L170.4,432.6L168.7,430.7L164.1,427.6L158.9,424.9L152.6,421.1L149.8,418.4L149.4,417.2Z","c":[180.2,415.3]}},"plants":[{"name":"大潭電廠","county":"桃園市","fuel":"lng","lon":121.03,"lat":25.03,"cap":6100,"mw":4650,"xy":[224.9,63]},{"name":"林口電廠","county":"新北市","fuel":"coal","lon":121.3,"lat":25.12,"cap":2400,"mw":1620,"xy":[259.1,50.4]},{"name":"協和電廠","county":"基隆市","fuel":"lng","lon":121.74,"lat":25.15,"cap":0,"mw":0,"note":"燃油機組已除役，燃氣機組建置中","xy":[314.8,46.2]},{"name":"通霄電廠","county":"苗栗縣","fuel":"lng","lon":120.66,"lat":24.49,"cap":3300,"mw":2050,"xy":[178.1,138.2]},{"name":"台中電廠","county":"臺中市","fuel":"coal","lon":120.48,"lat":24.21,"cap":5500,"mw":3350,"xy":[155.3,177.1]},{"name":"興達電廠","county":"高雄市","fuel":"lng","lon":120.2,"lat":22.85,"cap":4400,"mw":2280,"xy":[119.9,364.8]},{"name":"大林電廠","county":"高雄市","fuel":"coal","lon":120.33,"lat":22.53,"cap":2400,"mw":1430,"xy":[136.3,408.7]},{"name":"南部電廠","county":"高雄市","fuel":"lng","lon":120.31,"lat":22.57,"cap":1700,"mw":860,"xy":[133.8,403.2]},{"name":"麥寮電廠","county":"雲林縣","fuel":"ipp-coal","lon":120.19,"lat":23.79,"cap":1800,"mw":1240,"xy":[118.6,235.3]},{"name":"和平電廠","county":"花蓮縣","fuel":"ipp-coal","lon":121.75,"lat":24.31,"cap":1300,"mw":760,"xy":[316,163.2]},{"name":"新桃電廠","county":"新竹縣","fuel":"ipp-lng","lon":121.08,"lat":24.84,"cap":600,"mw":510,"xy":[231.3,89.5]},{"name":"國光電廠","county":"桃園市","fuel":"ipp-lng","lon":121.22,"lat":24.97,"cap":480,"mw":420,"xy":[249,71.4]},{"name":"星彰電廠","county":"彰化縣","fuel":"ipp-lng","lon":120.42,"lat":24.08,"cap":490,"mw":440,"xy":[147.7,195.2]},{"name":"嘉惠電廠","county":"嘉義縣","fuel":"ipp-lng","lon":120.31,"lat":23.46,"cap":700,"mw":610,"xy":[133.8,280.9]},{"name":"森霸電廠","county":"臺南市","fuel":"ipp-lng","lon":120.27,"lat":23.08,"cap":980,"mw":800,"xy":[128.7,333.2]},{"name":"明潭電廠","county":"南投縣","fuel":"hydro","lon":120.87,"lat":23.85,"cap":1600,"mw":0,"note":"抽蓄水力，午間多為抽水","xy":[204.7,227]},{"name":"大觀電廠","county":"南投縣","fuel":"hydro","lon":120.84,"lat":23.84,"cap":1100,"mw":120,"xy":[200.9,228.4]},{"name":"德基／谷關水力","county":"臺中市","fuel":"hydro","lon":121.15,"lat":24.25,"cap":420,"mw":150,"xy":[240.1,171.6]},{"name":"彰化外海風場群","county":"彰化縣","fuel":"wind","lon":120.2,"lat":24.1,"cap":3200,"mw":1380,"xy":[119.9,192.4]},{"name":"苗栗外海風場","county":"苗栗縣","fuel":"wind","lon":120.72,"lat":24.7,"cap":500,"mw":290,"xy":[185.7,109]},{"name":"雲林外海風場","county":"雲林縣","fuel":"wind","lon":120.05,"lat":23.73,"cap":640,"mw":330,"xy":[100.9,243.6]},{"name":"彰濱光電","county":"彰化縣","fuel":"solar","lon":120.4,"lat":24.12,"cap":400,"mw":290,"xy":[145.2,189.6]},{"name":"南鹽光電","county":"臺南市","fuel":"solar","lon":120.1,"lat":23.13,"cap":300,"mw":215,"xy":[107.2,326.3]},{"name":"核三廠","county":"屏東縣","fuel":"nuclear","lon":120.75,"lat":21.96,"cap":0,"mw":0,"note":"2025 年 5 月停機，目前無核能發電","xy":[189.5,486.7]}]};
+
+/* ───────── 示意資料（欄位與台電公開資料一致；GitHub 版改讀 data/latest.json） ───────── */
+const FUELS = [
+  {k:'lng',    n:'燃氣',     c:'--f-lng'},
+  {k:'coal',   n:'燃煤',     c:'--f-coal'},
+  {k:'cogen',  n:'汽電共生', c:'--f-cogen'},
+  {k:'oil',    n:'燃油',     c:'--f-oil'},
+  {k:'hydro',  n:'水力',     c:'--f-hydro'},
+  {k:'wind',   n:'風力',     c:'--f-wind'},
+  {k:'solar',  n:'太陽能',   c:'--f-solar'},
+  {k:'other',  n:'其他再生', c:'--f-other'},
+  {k:'storage',n:'儲能',     c:'--f-storage'},
+  {k:'nuclear',n:'核能',     c:'--f-nuclear'},
+];
+const RENEW = ['hydro','wind','solar','other'];
+const FUEL_OF_PLANT = {lng:'lng',coal:'coal',oil:'oil',hydro:'hydro',storage:'storage',wind:'wind',solar:'solar',nuclear:'nuclear'};
+const FUEL_LABEL = {lng:'燃氣',coal:'燃煤',oil:'燃油',hydro:'水力',storage:'抽蓄儲能',wind:'風力',solar:'太陽能',nuclear:'核能'};
+
+function knots(pts){ // 線性內插 [hour,value]
+  return h=>{for(let i=1;i<pts.length;i++){if(h<=pts[i][0]){const [h0,v0]=pts[i-1],[h1,v1]=pts[i];return v0+(v1-v0)*(h-h0)/(h1-h0);}}return pts[pts.length-1][1];};
+}
+function makeSample(){
+  const NOW = 13.5; // 13:30
+  const today = knots([[0,2660],[2,2520],[4.5,2405],[6,2470],[7,2620],[8,2860],[9,3080],[10,3220],[11.3,3330],[12,3170],[12.6,3150],[13.5,3350],[14.5,3368],[15.5,3340],[17,3255],[18.5,3190],[20,3120],[22,2930],[24,2700]]);
+  const yday  = knots([[0,2600],[3,2390],[5,2330],[7,2380],[9,2560],[11,2760],[12,2700],[13,2720],[14.5,2810],[16,2790],[18,2840],[19.5,2900],[21,2830],[23,2700],[24,2650]]);
+  const pts=[], ypts=[];
+  for(let i=0;i<=144;i++){const h=i/6; ypts.push([h,Math.round(yday(h))]); if(h<=NOW+1e-9) pts.push([h,Math.round(today(h)+Math.sin(i*1.7)*9)]);}
+  pts[pts.length-1][1]=3350;
+  // 能源別（萬瓩）
+  const mixAt = (h,load)=>{
+    const s = h>6.1&&h<17.6 ? 775*Math.pow(Math.sin(Math.PI*(h-6.1)/11.5),1.25) : 0;
+    const wind = 205+18*Math.sin(h/3.2);
+    const hydro = h>17&&h<22 ? 190 : 70;
+    const storage = h>17.3&&h<21.5 ? 80 : 15;
+    const coal = 840 - (s>300?40:0);
+    const m = {coal, cogen:100, oil:10, hydro, wind, solar:s, other:25, storage, nuclear:0};
+    const rest = Object.values(m).reduce((a,b)=>a+b,0);
+    m.lng = Math.max(0, load-rest);
+    for(const k in m) m[k]=Math.round(m[k]*10)/10;
+    return m;
+  };
+  const stack = pts.map(([h,v])=>({h, ...mixAt(h,v)}));
+  const now = stack[stack.length-1];
+  const mix = {}; FUELS.forEach(f=>mix[f.k]=now[f.k]||0);
+  // 近 30 日
+  const reserve=[]; let seed=7;
+  const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+  for(let d=30; d>=1; d--){const dt=new Date(2026,9,26-d); const wk=dt.getDay(); let r=10.6+rnd()*4.6+(wk===0||wk===6?2.2:0); if(d===19) r=8.9; if(d===12) r=9.6; reserve.push({date:`${dt.getMonth()+1}/${dt.getDate()}`, rate:+r.toFixed(1)});}
+  return {
+    sample:true,
+    asOf:'2026-10-26 13:30',
+    supply:{ curLoad:3350, capacity:3760, peakForecast:3365, peakTime:'14:00–15:00', reserveRate:11.7, reserveMW:395, ydayPeak:2905, ydayRate:16.2 },
+    load:{today:pts, yday:ypts, nowH:NOW},
+    mix, stack,
+    regions:[
+      {n:'北部', gen:1030, load:1305},
+      {n:'中部', gen:1170, load:885},
+      {n:'南部', gen:1110, load:1075},
+      {n:'東部', gen:40,   load:85},
+    ],
+    reserve,
+    countyMonth:'2026 年 9 月',
+    counties:{ // 億度；res/svc/ind 為百分比
+      '臺北市':[13.5,38,52,6],'新北市':[22.0,40,28,28],'桃園市':[30.5,16,13,68],'臺中市':[28.0,20,16,61],'臺南市':[21.5,16,11,70],'高雄市':[32.0,15,13,69],
+      '基隆市':[2.1,40,30,25],'新竹市':[7.4,12,10,76],'新竹縣':[11.5,10,8,80],'苗栗縣':[5.8,16,10,71],'彰化縣':[11.8,22,12,62],'南投縣':[2.8,35,22,38],
+      '雲林縣':[13.2,11,6,80],'嘉義市':[1.5,42,40,15],'嘉義縣':[4.5,20,10,65],'屏東縣':[4.6,38,22,30],'宜蘭縣':[3.4,32,22,42],'花蓮縣':[2.6,32,26,38],
+      '臺東縣':[1.2,40,35,18],'澎湖縣':[0.6,42,40,8],'金門縣':[0.5,48,38,6],'連江縣':[0.08,46,44,2]
+    },
+    plants: ISL.plants
+  };
+}
+
+/* 讀取 GitHub Actions 產生的 data/*.json；讀不到時改用示意資料 */
+async function getJSON(u){const r=await fetch(u+'?t='+Date.now(),{cache:'no-store'}); if(!r.ok) throw new Error(u+' '+r.status); return r.json();}
+async function loadData(){
+  const S=makeSample();
+  let d;
+  try{
+    const L=await getJSON('data/latest.json');
+    d={...S, ...L, supply:{...S.supply, ...(L.supply||{})}, sample:false};
+    if(!L.load||!L.load.today||!L.load.today.length) d.load={today:[[12,d.supply.curLoad]],yday:[],nowH:12};
+    if(!L.stack||!L.stack.length) d.stack=[{h:d.load.nowH||12,...(L.mix||S.mix)}];
+    if(!L.mix) d.mix=S.mix;
+    if(!L.regions) d.regions=S.regions;
+    if(!L.reserve) d.reserve=[];
+    d.countySample=true;
+    try{const c=await getJSON('data/counties.json'); if(c&&c.counties&&Object.keys(c.counties).length){d.counties=c.counties; d.countyMonth=c.month||S.countyMonth; d.countySample=!!c.sample; d.countyNote=c.note||'';}}catch(e){}
+  }catch(e){ d=S; d.countySample=true; }
+  prepPlants(d);
+  return d;
+}
+/* 各電廠出力：真實資料時依台電逐機組名稱加總；示意資料或回放過去時間時依全台比例推估 */
+function prepPlants(d){
+  const U=(!d.sample&&d.units)||null;
+  const named=new Set();
+  if(U) ISL.plants.forEach(q=>{if(q.fuel==='solar'&&q.m&&q.m.length) U.forEach(u=>{if(u[0]==='solar'&&q.m.some(pre=>u[1].startsWith(pre))) named.add(u[1]);});});
+  const restSolar=U?U.filter(u=>u[0]==='solar'&&!named.has(u[1])).reduce((s,u)=>s+(u[3]>0?u[3]:0),0):0;
+  const poolSum=ISL.plants.reduce((s,q)=>s+(q.pool||0),0);
+  ISL.plants.forEach(p=>{
+    if(p.cap0==null) p.cap0=p.cap;
+    p._now=null; p._pump=0; p._src='share'; p.cap=p.cap0;
+    if(U){
+      const us=(p.m&&p.m.length)?U.filter(u=>u[0]===p.fuel&&p.m.some(pre=>u[1].startsWith(pre))):[];
+      if(us.length){p._now=us.reduce((s,u)=>s+(u[3]>0?u[3]:0),0); const c=us.reduce((s,u)=>s+(u[2]||0),0); if(c>0)p.cap=Math.round(c); p._src='unit';}
+      else if(p.pool){p._now=restSolar*p.pool/poolSum; p._src='pool';}
+      else if(p.m&&p.m.length){p._now=0; p._src='unit';}
+      if(p.fuel==='storage') p._pump=-U.filter(u=>u[0]==='storage_load'&&p.m.some(pre=>u[1].startsWith(pre))).reduce((s,u)=>s+(u[3]<0?u[3]:0),0);
+    }
+  });
+  const last=d.stack.length-1;
+  ISL.plants.forEach(p=>{p.mw=plantMW(p,last,d);});
+}
+function plantMW(p,i,dd){
+  const DD=dd||D, S=DD.stack, last=S.length-1, s=S[Math.min(i,last)]||{};
+  const share=()=>p.share?Math.round((s[p.fuel]||0)*10*p.share):0;
+  if(p._now==null) return share();
+  if(i>=last) return Math.round(p._now);
+  const a=S[last][p.fuel]||0; return a>0?Math.round(p._now*(s[p.fuel]||0)/a):share();
+}
+
+/* ───────── 工具 ───────── */
+const $ = s=>document.querySelector(s);
+const css = n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v,d=0)=>v.toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d});
+const hhmm = h=>{const m=Math.round(h*60);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs={},parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function lightOf(rate,mw){
+  if(mw!=null&&mw<=50) return {k:'black',n:'限電準備',c:'--black'};
+  if(mw!=null&&mw<=90) return {k:'red',n:'限電警戒',c:'--crit'};
+  if(rate<=6) return {k:'orange',n:'供電警戒',c:'--alert'};
+  if(rate<10) return {k:'yellow',n:'供電吃緊',c:'--warn'};
+  return {k:'green',n:'供電充裕',c:'--ok'};
+}
+
+let D;
+setInterval(()=>{loadData().then(d=>{if(d.sample&&D&&!D.sample)return; D=d; renderAll(); window.__islandRefresh&&window.__islandRefresh();});},5*60*1000);
+loadData().then(d=>{D=d; renderAll(); window.__islandReady&&window.__islandReady();
+  const re=()=>{ if(D) renderAll(); window.__islandTheme&&window.__islandTheme(); };
+  try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',re); }catch(e){}
+  new MutationObserver(re).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+});
+
+function renderAll(){
+  $('#asof').textContent = D.asOf;
+  const chip=$('#srcchip'); let lag=0; if(!D.sample){const tp=new Date(D.asOf.replace(' ','T')+':00+08:00'); lag=Math.round((Date.now()-tp)/60000);}
+  const stale=!D.sample&&lag>40;
+  chip.className='chip '+(D.sample||stale?'sample':'live'); chip.textContent=D.sample?'示意資料（讀不到即時資料）':stale?`資料已 ${lag} 分鐘未更新`:'台電即時資料';
+  $('#map-note').textContent=(D.countySample?'縣市用電為示意值，':(D.countyNote?D.countyNote+' ':''))+'點選縣市或電廠查看細節';
+  renderStatus(); renderLoad(); renderMix(); renderStack(); renderRegions(); renderReserve(); initMap();
+}
+
+/* ───────── 燈號帶 ───────── */
+function renderStatus(){
+  const s=D.supply, IND={G:['green','供電充裕','--ok'],Y:['yellow','供電吃緊','--warn'],O:['orange','供電警戒','--alert'],R:['red','限電警戒','--crit'],B:['black','限電準備','--black']}; const L=IND[s.indicator]?{k:IND[s.indicator][0],n:IND[s.indicator][1],c:IND[s.indicator][2]}:lightOf(s.reserveRate,s.reserveMW);
+  const order=[['green','--ok'],['yellow','--warn'],['orange','--alert'],['red','--crit'],['black','--black']];
+  const util=s.util!=null?s.util:s.curLoad/s.capacity*100;
+  $('#status').style.setProperty('--lc',`var(${L.c})`);
+  $('#status').innerHTML=`
+    <div class="light">
+      <div class="lamp" aria-hidden="true"></div>
+      <div><small>今日備轉容量率燈號</small><b>${L.n}</b>
+        <div class="lamps" aria-hidden="true">${order.map(([k,c])=>`<i class="${k===L.k?'on':''}" style="--c:var(${c})"></i>`).join('')}</div>
+      </div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><span>目前用電量</span><b>${fmt(s.curLoad,1)}<em>萬瓩</em></b><div class="meter" title="使用率"><i style="width:${util.toFixed(1)}%"></i></div><span class="sub">使用率 ${util.toFixed(s.util!=null?0:1)}%${s.util!=null?'（台電公布）':''}</span></div>
+      <div class="kpi"><span>今日最大供電能力</span><b>${fmt(s.capacity,1)}<em>萬瓩</em></b><span class="sub">淨尖峰供電能力</span></div>
+      <div class="kpi"><span>預估尖峰備轉容量率</span><b style="color:var(${L.c})">${s.reserveRate.toFixed(1)}<em>%</em></b><span class="sub">備轉容量 ${fmt(s.reserveMW)} 萬瓩</span></div>
+      <div class="kpi"><span>預估今日尖峰</span><b>${fmt(s.peakForecast,1)}<em>萬瓩</em></b><span class="sub">${s.peakTime}・昨日尖峰 ${s.ydayPeak!=null?fmt(s.ydayPeak):'—'}</span></div>
+    </div>`;
+}
+
+/* ───────── 今日用電曲線 ───────── */
+function renderLoad(){
+  const svg=$('#ch-load'); svg.innerHTML='';
+  const W=640,H=240,m={l:40,r:14,t:12,b:24}; const allv=[...D.load.today,...D.load.yday].map(p=>p[1]); const y0=Math.floor(Math.min(...allv)/500)*500-0, y1=Math.ceil(Math.max(...allv,D.supply.capacity||0)/500)*500;
+  const X=h=>m.l+(W-m.l-m.r)*h/24, Y=v=>m.t+(H-m.t-m.b)*(1-(v-y0)/(y1-y0));
+  const g=el('g',{class:'grid'},svg);
+  for(let v=y0;v<=y1;v+=500){el('line',{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v)},g);el('text',{x:m.l-6,y:Y(v)+3.5,'text-anchor':'end'},svg).textContent=fmt(v);}
+  for(let h=0;h<=24;h+=3){el('text',{x:X(h),y:H-6,'text-anchor':h===0?'start':h===24?'end':'middle'},svg).textContent=String(h).padStart(2,'0')+':00';}
+  el('line',{x1:m.l,x2:W-m.r,y1:Y(D.supply.capacity),y2:Y(D.supply.capacity),stroke:css('--crit'),'stroke-width':1.5,'stroke-dasharray':'5 4'},svg);
+  el('text',{x:W-m.r,y:Y(D.supply.capacity)-5,'text-anchor':'end',style:'fill:var(--crit)'},svg).textContent='供電能力 '+fmt(D.supply.capacity);
+  const line=pts=>pts.map(([h,v],i)=>(i?'L':'M')+X(h).toFixed(1)+' '+Y(v).toFixed(1)).join('');
+  el('path',{d:line(D.load.yday),fill:'none',stroke:css('--faint'),'stroke-width':1.5},svg);
+  const t=D.load.today;
+  el('path',{d:line(t)+`L${X(t[t.length-1][0])} ${Y(y0)}L${X(0)} ${Y(y0)}Z`,fill:css('--accent'),opacity:.1},svg);
+  el('path',{d:line(t),fill:'none',stroke:css('--accent'),'stroke-width':2.2,'stroke-linejoin':'round'},svg);
+  const [nh,nv]=t[t.length-1];
+  el('circle',{cx:X(nh),cy:Y(nv),r:4.5,fill:css('--accent'),stroke:css('--surface'),'stroke-width':2},svg);
+  const cur=el('line',{y1:m.t,y2:H-m.b,stroke:css('--muted'),'stroke-width':1,opacity:0},svg);
+  const ro=$('#ro-load');
+  const show=i=>{
+    const h=i/6, td=t.find(p=>Math.abs(p[0]-h)<0.05), ty=D.load.yday.find(p=>Math.abs(p[0]-h)<0.05);
+    ro.innerHTML=`<span><b class="num">${hhmm(td?td[0]:h)}</b></span><span>今日 <b class="num">${td?fmt(td[1]):'—'}</b></span><span>昨日 <b class="num">${ty?fmt(ty[1]):'—'}</b></span>`;
+  };
+  const nowI=Math.round(t[t.length-1][0]*6); show(nowI);
+  hover(svg,W,m,24,h=>{const i=Math.round(h*6);cur.setAttribute('x1',X(i/6));cur.setAttribute('x2',X(i/6));cur.setAttribute('opacity',.5);show(i);},()=>{cur.setAttribute('opacity',0);show(nowI);});
+}
+function hover(svg,W,m,span,on,off){
+  const f=e=>{const r=svg.getBoundingClientRect();const x=(e.clientX-r.left)/r.width*W;const h=Math.max(0,Math.min(span,(x-m.l)/(W-m.l-m.r)*span));on(h);};
+  if(svg._h){svg.removeEventListener('pointermove',svg._h[0]);svg.removeEventListener('pointerdown',svg._h[0]);svg.removeEventListener('pointerleave',svg._h[1]);}
+  svg._h=[f,off]; svg.addEventListener('pointermove',f); svg.addEventListener('pointerdown',f); svg.addEventListener('pointerleave',off);
+}
+
+/* ───────── 即時能源結構 ───────── */
+function renderMix(){
+  const total=Object.values(D.mix).reduce((a,b)=>a+Math.max(0,b),0);
+  const svg=$('#donut'); svg.innerHTML='';
+  const cx=75,cy=75,R=66,r=44; let a=-Math.PI/2;
+  FUELS.forEach(f=>{const v=Math.max(0,D.mix[f.k]||0); if(!v)return; const a2=a+v/total*Math.PI*2;
+    const p=(ang,rad)=>[cx+rad*Math.cos(ang),cy+rad*Math.sin(ang)]; const lg=a2-a>Math.PI?1:0;
+    const [x1,y1]=p(a,R),[x2,y2]=p(a2,R),[x3,y3]=p(a2,r),[x4,y4]=p(a,r);
+    el('path',{d:`M${x1} ${y1}A${R} ${R} 0 ${lg} 1 ${x2} ${y2}L${x3} ${y3}A${r} ${r} 0 ${lg} 0 ${x4} ${y4}Z`,fill:css(f.c),stroke:css('--surface'),'stroke-width':1.2},svg); a=a2;});
+  el('text',{x:cx,y:cy-2,'text-anchor':'middle','font-size':17,'font-weight':600},svg).textContent=fmt(total,0);
+  el('text',{x:cx,y:cy+15,'text-anchor':'middle','font-size':10,style:'fill:var(--muted)'},svg).textContent='萬瓩';
+  $('#mixlist').innerHTML=FUELS.map(f=>{const v=D.mix[f.k]||0;return `<div class="mixrow ${v?'':'zero'}"><span><i class="sw" style="background:var(${f.c})"></i>${f.n}</span><span class="v num">${fmt(v,1)}</span><span class="p num">${(v/total*100).toFixed(1)}%</span></div>`;}).join('');
+  const re=RENEW.reduce((s,k)=>s+(D.mix[k]||0),0);
+  $('#renew').innerHTML=`<span>再生能源占比</span><b>${(re/total*100).toFixed(1)}%</b><span>（${fmt(re,0)} 萬瓩，含水力、風力、太陽能及其他）</span>`;
+}
+
+/* ───────── 今日發電組合（堆疊） ───────── */
+function renderStack(){
+  const svg=$('#ch-stack'); svg.innerHTML='';
+  const W=1000,H=260,m={l:44,r:14,t:10,b:24}; const yMax=Math.max(1000,Math.ceil(Math.max(...D.stack.map(p=>FUELS.reduce((s,f)=>s+Math.max(0,p[f.k]||0),0)))/1000)*1000);
+  const X=h=>m.l+(W-m.l-m.r)*h/24, Y=v=>m.t+(H-m.t-m.b)*(1-v/yMax);
+  const g=el('g',{class:'grid'},svg);
+  for(let v=0;v<=yMax;v+=1000){el('line',{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v)},g);el('text',{x:m.l-6,y:Y(v)+3.5,'text-anchor':'end'},svg).textContent=fmt(v);}
+  for(let h=0;h<=24;h+=2){el('text',{x:X(h),y:H-6,'text-anchor':h===0?'start':h===24?'end':'middle'},svg).textContent=String(h).padStart(2,'0')+':00';}
+  const order=['nuclear','coal','cogen','oil','lng','hydro','other','wind','solar','storage'];
+  const S=D.stack; const base=S.map(()=>0);
+  order.forEach(k=>{const f=FUELS.find(x=>x.k===k); if(!S.some(p=>p[k]>0))return;
+    const top=S.map((p,i)=>base[i]+Math.max(0,p[k]||0));
+    let d='M'+S.map((p,i)=>`${X(p.h).toFixed(1)} ${Y(top[i]).toFixed(1)}`).join('L');
+    for(let i=S.length-1;i>=0;i--) d+=`L${X(S[i].h).toFixed(1)} ${Y(base[i]).toFixed(1)}`;
+    el('path',{d:d+'Z',fill:css(f.c),opacity:.92},svg); top.forEach((v,i)=>base[i]=v);});
+  const last=S[S.length-1];
+  el('line',{x1:X(last.h),x2:X(last.h),y1:m.t,y2:H-m.b,stroke:css('--fg'),'stroke-width':1,'stroke-dasharray':'3 3',opacity:.5},svg);
+  el('text',{x:X(last.h)+6,y:m.t+12,style:'fill:var(--fg)'},svg).textContent='現在 '+hhmm(last.h);
+  const cur=el('line',{y1:m.t,y2:H-m.b,stroke:css('--fg'),'stroke-width':1,opacity:0},svg);
+  $('#stack-legend').innerHTML=FUELS.filter(f=>S.some(p=>p[f.k]>0)).map(f=>`<span><i class="sw" style="background:var(${f.c})"></i>${f.n}</span>`).join('');
+  const ro=$('#ro-stack');
+  const show=i=>{const p=S[Math.min(i,S.length-1)]; const tot=FUELS.reduce((s,f)=>s+Math.max(0,p[f.k]||0),0); const re=RENEW.reduce((s,k)=>s+(p[k]||0),0);
+    ro.innerHTML=`<span><b class="num">${hhmm(p.h)}</b></span><span>總計 <b class="num">${fmt(tot)}</b></span><span>燃氣 <b class="num">${fmt(p.lng)}</b></span><span>燃煤 <b class="num">${fmt(p.coal)}</b></span><span>太陽能 <b class="num">${fmt(p.solar)}</b></span><span>風力 <b class="num">${fmt(p.wind)}</b></span><span>再生能源 <b class="num">${(re/tot*100).toFixed(1)}%</b></span>`;};
+  show(S.length-1);
+  hover(svg,W,m,24,h=>{const i=Math.min(S.length-1,Math.round(h*6));cur.setAttribute('x1',X(S[i].h));cur.setAttribute('x2',X(S[i].h));cur.setAttribute('opacity',.45);show(i);},()=>{cur.setAttribute('opacity',0);show(S.length-1);});
+}
+
+/* ───────── 區域供需 ───────── */
+function renderRegions(){
+  const mx=Math.max(...D.regions.flatMap(r=>[r.gen,r.load]));
+  $('#regions').innerHTML=D.regions.map(r=>{const net=r.gen-r.load;
+    return `<div class="reg"><span class="n">${r.n}</span>
+      <div class="bars"><div class="bar g" title="發電 ${r.gen} 萬瓩"><i style="width:${r.gen/mx*100}%"></i></div><div class="bar l" title="用電 ${r.load} 萬瓩"><i style="width:${r.load/mx*100}%"></i></div></div>
+      <div class="net num"><div>${fmt(r.gen)} / ${fmt(r.load)}</div><div class="${net>=0?'out':'in'}">${net>=0?'送出':'受電'} ${fmt(Math.abs(net))}</div></div></div>`;}).join('')
+    + `<p class="empty" style="margin:0">北部用電大於發電，缺口主要由中部送電補足（區域值為台電依電廠位置推估）。</p>`;
+}
+
+/* ───────── 近 30 日備轉 ───────── */
+function renderReserve(){
+  const svg=$('#ch-reserve'); svg.innerHTML='';
+  const R=D.reserve, n=R.length;
+  if(!n){$('#ro-reserve').innerHTML='<span>資料累積中，明天起會逐日出現。</span>';return;}
+  const W=640,H=230,m={l:34,r:10,t:12,b:24}, y1=Math.max(20,Math.ceil(Math.max(...R.map(d=>d.rate))/5)*5), bw=Math.min(36,(W-m.l-m.r)/n);
+  const Y=v=>m.t+(H-m.t-m.b)*(1-v/y1);
+  const g=el('g',{class:'grid'},svg);
+  for(let v=0;v<=y1;v+=5){el('line',{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v)},g);el('text',{x:m.l-6,y:Y(v)+3.5,'text-anchor':'end'},svg).textContent=v+'%';}
+  const bars=R.map((d,i)=>{const L=lightOf(d.rate);const b=el('rect',{x:m.l+i*bw+bw*.18,y:Y(d.rate),width:bw*.64,height:Y(0)-Y(d.rate),rx:1.5,fill:css(L.c),opacity:i===n-1?1:.78},svg);
+    if(i%Math.max(1,Math.round(n/6))===0||i===n-1) el('text',{x:m.l+i*bw+bw/2,y:H-6,'text-anchor':'middle'},svg).textContent=d.date; return b;});
+  [[10,'--ok'],[6,'--alert']].forEach(([v,c])=>{el('line',{x1:m.l,x2:W-m.r,y1:Y(v),y2:Y(v),stroke:css(c),'stroke-width':1.2,'stroke-dasharray':'4 3'},svg);});
+  const ro=$('#ro-reserve');
+  const lows=R.filter(d=>d.rate<10).length, avg=R.reduce((s,d)=>s+d.rate,0)/n;
+  const base=`<span>平均 <b class="num">${avg.toFixed(1)}%</b></span><span>黃燈以下 <b class="num">${lows}</b> 天</span><span>最低 <b class="num">${Math.min(...R.map(d=>d.rate)).toFixed(1)}%</b></span>`;
+  ro.innerHTML=base;
+  hover(svg,W,m,n,x=>{const i=Math.min(n-1,Math.floor(x));bars.forEach((b,j)=>b.setAttribute('opacity',j===i?1:.45));ro.innerHTML=`<span><b class="num">${R[i].date}</b></span><span>備轉容量率 <b class="num">${R[i].rate.toFixed(1)}%</b></span><span>${lightOf(R[i].rate).n}</span>`;},()=>{bars.forEach((b,j)=>b.setAttribute('opacity',j===n-1?1:.78));ro.innerHTML=base;});
+}
+
+/* ───────── 地圖 ───────── */
+const MAP={metric:'total', sel:null, selPlant:null};
+const METRIC={total:{lab:'月用電量（億度）',f:c=>c[0]}, res:{lab:'住宅用電（億度）',f:c=>c[0]*c[1]/100}, ind:{lab:'工業用電（億度）',f:c=>c[0]*c[3]/100}};
+let mapInit=false;
+function initMap(){
+  const svg=$('#map'); svg.innerHTML=''; const firstInit=!mapInit; mapInit=true; svg.setAttribute('viewBox',`0 0 ${GEO.W} ${GEO.H}`);
+  const gC=el('g',{},svg), gL=el('g',{},svg), gP=el('g',{id:'plants'},svg);
+  for(const [n,c] of Object.entries(GEO.counties)){
+    const p=el('path',{d:c.d,class:'county','data-n':n,tabindex:0,role:'button','aria-label':n},gC);
+    p.addEventListener('click',()=>select(n)); p.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(n);}});
+  }
+  el('text',{x:GEO.counties['澎湖縣'].c[0],y:GEO.counties['澎湖縣'].c[1]+20,'text-anchor':'middle',class:'isl'},gL).textContent='澎湖';
+  const sorted=[...ISL.plants].sort((a,b)=>b.cap-a.cap);
+  for(const p of sorted){
+    const fk=FUEL_OF_PLANT[p.fuel]; const r=p.cap?3+Math.sqrt(p.cap)/8.5:4;
+    const c=el('circle',{cx:p.xy[0],cy:p.xy[1],r:r.toFixed(1),class:'plant'+(p.mw?'':' off'),fill:css(FUELS.find(f=>f.k===fk).c),'fill-opacity':p.cap?(.45+.5*p.mw/p.cap).toFixed(2):1,'data-p':p.name},gP);
+    if(!p.mw) c.setAttribute('stroke',css(FUELS.find(f=>f.k===fk).c));
+    el('title',{},c).textContent=`${p.name}　${fmt(p.mw)} / ${fmt(p.cap)} MW`;
+    c.addEventListener('click',e=>{e.stopPropagation();selectPlant(p);});
+  }
+  if(firstInit) document.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{MAP.metric=b.dataset.m;document.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b));paint();}));
+  if(firstInit) $('#showPlants').addEventListener('change',e=>{$('#plants').style.display=e.target.checked?'':'none';});
+  if(!$('#showPlants').checked) gP.style.display='none';
+  paint(); select(MAP.sel||'臺北市');
+}
+function paint(){
+  const M=METRIC[MAP.metric]; const vals=Object.fromEntries(Object.entries(D.counties).map(([n,c])=>[n,M.f(c)]));
+  const max=Math.max(...Object.values(vals));
+  document.querySelectorAll('.county').forEach(p=>{const v=vals[p.dataset.n]||0; const t=Math.pow(v/max,.6)*100; p.style.fill=`color-mix(in oklab, var(--map-hi) ${t.toFixed(0)}%, var(--map-lo))`;});
+  $('#scale-lo').textContent='0'; $('#scale-hi').textContent=fmt(max,1)+' 億度';
+  $('#rank-label').textContent=M.lab;
+  const rows=Object.entries(vals).sort((a,b)=>b[1]-a[1]);
+  $('#rank').innerHTML=rows.map(([n,v],i)=>`<button type="button" data-n="${n}" class="${n===MAP.sel?'sel':''}"><span class="o">${String(i+1).padStart(2,'0')}</span><span>${n.replace(/[縣市]$/,'')}</span><i class="t" style="width:${Math.max(2,v/max*100)}%"></i><span class="v num">${v<1?v.toFixed(2):v.toFixed(1)}</span></button>`).join('');
+  $('#rank').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>select(b.dataset.n)));
+  if(MAP.sel) renderDetail();
+}
+function select(n){MAP.sel=n;MAP.selPlant=null;
+  document.querySelectorAll('.county').forEach(p=>p.classList.toggle('sel',p.dataset.n===n));
+  document.querySelectorAll('.plant').forEach(p=>p.classList.remove('sel'));
+  document.querySelectorAll('#rank button').forEach(b=>b.classList.toggle('sel',b.dataset.n===n));
+  renderDetail();}
+function selectPlant(p){select(p.county); MAP.selPlant=p.name;
+  document.querySelectorAll('.plant').forEach(c=>c.classList.toggle('sel',c.dataset.p===p.name)); renderDetail();}
+function renderDetail(){
+  const n=MAP.sel, c=D.counties[n]; if(!c) return;
+  const all=Object.entries(D.counties).sort((a,b)=>b[1][0]-a[1][0]); const rank=all.findIndex(x=>x[0]===n)+1;
+  const total=Object.values(D.counties).reduce((s,x)=>s+x[0],0);
+  const other=Math.max(0,100-c[1]-c[2]-c[3]);
+  const ps=D.plants.filter(p=>p.county===n).sort((a,b)=>b.cap-a.cap);
+  const gen=ps.reduce((s,p)=>s+p.mw,0);
+  $('#detail').innerHTML=`
+    <div class="dhead"><h3>${n}</h3><span class="eyebrow">${D.countyMonth}・全國第 ${rank} 名</span></div>
+    <div class="dstats">
+      <div><span>月用電量</span><b>${c[0]<1?c[0].toFixed(2):c[0].toFixed(1)}</b> <span style="display:inline">億度</span></div>
+      <div><span>占全國</span><b>${(c[0]/total*100).toFixed(1)}%</b></div>
+      <div><span>縣內大型電廠出力</span><b>${fmt(gen/10,0)}</b> <span style="display:inline">萬瓩</span></div>
+    </div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:6px">用電部門比例</div>
+      <div class="sector"><i style="width:${c[1]}%;background:var(--accent)"></i><i style="width:${c[2]}%;background:color-mix(in oklab,var(--accent) 50%,var(--surface))"></i><i style="width:${c[3]}%;background:var(--f-coal)"></i><i style="width:${other}%;background:var(--line)"></i></div>
+      <div class="legend" style="margin-top:6px"><span><i class="sw" style="background:var(--accent)"></i>住宅 ${c[1]}%</span><span><i class="sw" style="background:color-mix(in oklab,var(--accent) 50%,var(--surface))"></i>服務業及機關 ${c[2]}%</span><span><i class="sw" style="background:var(--f-coal)"></i>工業 ${c[3]}%</span><span><i class="sw" style="background:var(--line)"></i>其他 ${other}%</span></div>
+    </div>
+    <div>
+      <div class="eyebrow" style="margin-bottom:2px">縣內電廠（即時 / 裝置容量 MW）</div>
+      <div class="plist">${ps.length?ps.map(p=>`<div style="${p.name===MAP.selPlant?'background:var(--accent-soft);margin-inline:-6px;padding-inline:6px;border-radius:4px':''}"><span><i class="sw" style="background:var(${FUELS.find(f=>f.k===FUEL_OF_PLANT[p.fuel]).c})"></i>${p.name}<span style="color:var(--faint);font-size:12px">・${FUEL_LABEL[p.fuel]}</span></span><span class="num">${fmt(p.mw)} / ${fmt(p.cap)}</span>${p.note?`<span class="note">${p.note}</span>`:''}</div>`).join(''):'<span class="empty">縣內沒有 20 MW 以上單獨列示的電廠，用電主要靠電網輸入。</span>'}</div>
+    </div>`;
+}
+</script>
+
+
+<script>
+(function(){
+const FCOL={lng:'--f-lng',coal:'--f-coal',oil:'--f-oil',hydro:'--f-hydro',storage:'--f-storage',wind:'--f-wind',solar:'--f-solar',nuclear:'--f-nuclear'};
+const FNAME={lng:'燃氣',coal:'燃煤',oil:'燃油',hydro:'水力',storage:'抽蓄',wind:'風力',solar:'太陽能',nuclear:'核能'};
+const W=360,H=520;
+const cv=document.getElementById('isl'), ctx=cv.getContext('2d');
+const coast=new Path2D(ISL.coast);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let OFFY=30, FB='sans-serif', col={}, cam={x:W/2,y:H/2,z:1}, base=1, cw=0, chh=0, dpr=1;
+let idx=0, playing=false, filter=null, sel=null, running=false, last=0, tAcc=0;
+const parts=[], puffs=[];
+const P=ISL.plants, C=ISL.cities;
+P.forEach(p=>{p.ang=Math.random()*6; p.emit=Math.random(); p.size=p.roof?7:Math.min(15,6.5+Math.sqrt(Math.max(p.cap,200))/9);});
+// 每座城市的用電權重
+function cityW(){const t=C.map(c=>c.counties.reduce((s,n)=>s+(D.counties[n]?D.counties[n][0]:0),0)); const sum=t.reduce((a,b)=>a+b,0); C.forEach((c,i)=>{c.w=t[i]/sum; c.month=t[i];});}
+// 海浪亮點與山
+const waves=Array.from({length:90},()=>({x:Math.random()*W,y:Math.random()*H,p:Math.random()*6}));
+const mts=ISL.mountains.map((m,i)=>({x:m[0],y:m[1],s:11+((i*7)%9)})).sort((a,b)=>a.y-b.y);
+
+function readColors(){FB=css('--font-body');FUELS.forEach(f=>col[f.k]=css(f.c)); col.ok=css('--ok');col.warn=css('--warn');col.alert=css('--alert');col.crit=css('--crit');col.black=css('--black');}
+function stackAt(i){return D.stack[Math.min(i,D.stack.length-1)];}
+function mwOf(p,i){return plantMW(p,i);}
+function hourOf(i){return stackAt(i).h;}
+function loadAtH(h){const T=D.load.today; if(!T.length)return D.supply.curLoad||0; let b=T[0]; for(const p of T){if(Math.abs(p[0]-h)<Math.abs(b[0]-h))b=p;} return b[1];}
+function sun(h){return Math.max(0,Math.min(1,Math.sin(Math.PI*(h-6)/12)*1.4));}
+
+function resize(){const r=cv.getBoundingClientRect(); dpr=Math.min(2,window.devicePixelRatio||1); cw=r.width; chh=r.height; cv.width=Math.round(cw*dpr); cv.height=Math.round(chh*dpr); base=Math.min(cw/W,(chh-74)/H); OFFY=30; clampCam(); draw();}
+function sc(){return base*cam.z;}
+function toS(x,y){const s=sc();return [(x-cam.x)*s+cw/2,(y-cam.y)*s+chh/2-OFFY];}
+function toW(sx,sy){const s=sc();return [(sx-cw/2)/s+cam.x,(sy-chh/2+OFFY)/s+cam.y];}
+function clampCam(){cam.z=Math.max(1,Math.min(5,cam.z)); const s=sc(); const hw=cw/2/s, hh=chh/2/s; cam.x=Math.max(Math.min(hw,W/2),Math.min(W-Math.min(hw,W/2),cam.x)); cam.y=Math.max(Math.min(hh,H/2),Math.min(H-Math.min(hh,H/2),cam.y));}
+
+function lerpC(a,b,t){return a.map((v,i)=>Math.round(v+(b[i]-v)*t));}
+const rgb=a=>`rgb(${a[0]},${a[1]},${a[2]})`;
+
+/* ---------- 繪製 ---------- */
+function draw(){
+  if(!D) return;
+  const h=hourOf(idx), L=sun(h), s=sc();
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // 海
+  const sea1=lerpC([8,26,48],[30,120,160],L), sea2=lerpC([4,14,30],[16,84,124],L);
+  const g=ctx.createLinearGradient(0,0,0,chh); g.addColorStop(0,rgb(sea1)); g.addColorStop(1,rgb(sea2));
+  ctx.fillStyle=g; ctx.fillRect(0,0,cw,chh);
+  ctx.setTransform(dpr*s,0,0,dpr*s,dpr*(cw/2-cam.x*s),dpr*(chh/2-OFFY-cam.y*s));
+  const now=performance.now()/1000;
+  ctx.fillStyle=`rgba(255,255,255,${0.10+0.15*L})`;
+  waves.forEach(w=>{const a=(Math.sin(now*1.2+w.p)+1)/2; ctx.globalAlpha=a; ctx.fillRect(w.x+Math.sin(now*.3+w.p)*2,w.y,3,0.6);}); ctx.globalAlpha=1;
+  // 淺灘與島
+  ctx.lineJoin='round';
+  ctx.strokeStyle=`rgba(120,210,220,${0.25+0.25*L})`; ctx.lineWidth=7; ctx.stroke(coast);
+  ctx.strokeStyle=`rgba(240,226,180,${0.5+0.4*L})`; ctx.lineWidth=2.2; ctx.stroke(coast);
+  ctx.fillStyle=rgb(lerpC([40,66,46],[118,170,92],L)); ctx.fill(coast);
+  // 山脈
+  mts.forEach(m=>{const k=m.s; ctx.fillStyle=rgb(lerpC([46,60,48],[96,128,82],L)); ctx.beginPath(); ctx.moveTo(m.x-k*.75,m.y+k*.35); ctx.lineTo(m.x,m.y-k*.6); ctx.lineTo(m.x+k*.75,m.y+k*.35); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=rgb(lerpC([60,74,62],[132,160,110],L)); ctx.beginPath(); ctx.moveTo(m.x,m.y-k*.6); ctx.lineTo(m.x+k*.75,m.y+k*.35); ctx.lineTo(m.x+k*.15,m.y+k*.35); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=`rgba(245,248,250,${.55+.4*L})`; ctx.beginPath(); ctx.moveTo(m.x-k*.2,m.y-k*.3); ctx.lineTo(m.x,m.y-k*.6); ctx.lineTo(m.x+k*.2,m.y-k*.3); ctx.closePath(); ctx.fill();});
+  // 主幹線
+  ctx.strokeStyle=`rgba(255,240,200,${0.18+0.1*L})`; ctx.lineWidth=0.8; ctx.setLineDash([2,2]);
+  const trunk=['臺北','桃園','新竹','苗栗','臺中','彰化','雲林','嘉義','臺南','高雄','屏東'].map(n=>C.find(c=>c.name===n).xy);
+  ctx.beginPath(); trunk.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke();
+  ctx.beginPath(); ['臺北','宜蘭','花蓮','臺東','屏東'].map(n=>C.find(c=>c.name===n).xy).forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.stroke(); ctx.setLineDash([]);
+  // 實體依 y 排序
+  const ents=[...P.map(p=>({t:'p',o:p,y:p.xy[1]})),...C.filter(c=>c.name!=='澎湖').map(c=>({t:'c',o:c,y:c.xy[1]}))].sort((a,b)=>a.y-b.y);
+  ents.forEach(e=>{ctx.globalAlpha=(filter&&(e.t==='c'||e.o.fuel!==filter))?0.28:1; e.t==='p'?drawPlant(e.o,L,now):drawCity(e.o,L,false);}); ctx.globalAlpha=1;
+  // 煙
+  puffs.forEach(p=>{ctx.fillStyle=p.dark?`rgba(110,110,116,${p.a})`:`rgba(250,250,252,${p.a})`; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill();});
+  // 夜晚
+  const night=0.5*(1-L);
+  if(night>0.01){ctx.setTransform(dpr,0,0,dpr,0,0); ctx.fillStyle=`rgba(4,10,28,${night})`; ctx.fillRect(0,0,cw,chh); ctx.setTransform(dpr*s,0,0,dpr*s,dpr*(cw/2-cam.x*s),dpr*(chh/2-OFFY-cam.y*s));}
+  // 城市燈光與電力光點
+  ctx.globalCompositeOperation='lighter';
+  C.forEach(c=>{if(c.name==='澎湖')return; const r=6+Math.sqrt(c.w)*40; const gl=ctx.createRadialGradient(c.xy[0],c.xy[1],0,c.xy[0],c.xy[1],r); const a=(filter?0.12:0.22)+0.4*(1-L); gl.addColorStop(0,`rgba(255,214,140,${a})`); gl.addColorStop(1,'rgba(255,214,140,0)'); ctx.fillStyle=gl; ctx.beginPath(); ctx.arc(c.xy[0],c.xy[1],r,0,7); ctx.fill();});
+  parts.forEach(q=>{const t=q.t, x=(1-t)*(1-t)*q.a[0]+2*(1-t)*t*q.c[0]+t*t*q.b[0], y=(1-t)*(1-t)*q.a[1]+2*(1-t)*t*q.c[1]+t*t*q.b[1]; ctx.fillStyle=col[q.f]; ctx.globalAlpha=(filter&&q.f!==filter)?0.1:Math.min(1,Math.sin(t*Math.PI)*1.6); ctx.beginPath(); ctx.arc(x,y,1.05,0,7); ctx.fill();});
+  ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+  C.forEach(c=>{if(c.name!=='澎湖')drawCity(c,L,true);});
+  // 標籤（螢幕座標）
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.textAlign='center'; ctx.font=`600 ${cam.z>1.6?12:11}px ${FB}`;
+  C.forEach(c=>{const [x,y]=toS(c.xy[0],c.xy[1]+9); label(c.name,x,y,'#FFF6E2');});
+  if(cam.z>=2.2) P.forEach(p=>{if(p.roof)return; const [x,y]=toS(p.xy[0],p.xy[1]+p.size*.7+4); if(x<-40||x>cw+40||y<-20||y>chh+20)return; label(p.name.replace(/（.*）/,''),x,y,'#DDEBF2',10);});
+  if(sel){const o=sel.o; const [x,y]=toS(o.xy[0],o.xy[1]); ctx.strokeStyle='#FFD25A'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,Math.max(12,(o.size||8)*sc()*.75),0,7); ctx.stroke(); label(o.name,x,y-Math.max(16,(o.size||8)*sc()*.75)-6,'#FFD25A',12);}
+}
+function label(t,x,y,c,size){if(size)ctx.font=`600 ${size}px ${FB}`; ctx.lineWidth=3; ctx.strokeStyle='rgba(6,18,28,.75)'; ctx.strokeText(t,x,y); ctx.fillStyle=c; ctx.fillText(t,x,y);}
+
+function box3(x,y,w,d,h,top,front,side){ // 簡易立體方塊：底面中心 x,y
+  ctx.fillStyle=front; ctx.fillRect(x-w/2,y-h,w,h);
+  ctx.fillStyle=side; ctx.beginPath(); ctx.moveTo(x+w/2,y-h); ctx.lineTo(x+w/2+d,y-h-d*.6); ctx.lineTo(x+w/2+d,y-d*.6); ctx.lineTo(x+w/2,y); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=top; ctx.beginPath(); ctx.moveTo(x-w/2,y-h); ctx.lineTo(x-w/2+d,y-h-d*.6); ctx.lineTo(x+w/2+d,y-h-d*.6); ctx.lineTo(x+w/2,y-h); ctx.closePath(); ctx.fill();
+}
+function drawCity(c,L,lights){
+  const n=3+Math.round(c.w*30), [cx,cy]=c.xy; let seed=c.name.charCodeAt(0);
+  const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+  for(let i=0;i<Math.min(n,9);i++){const ox=(rnd()-.5)*10,oy=(rnd()-.5)*6,hh=2.5+rnd()*(4+c.w*40),w=2+rnd()*1.6;
+    if(!lights) box3(cx+ox,cy+oy,w,1.2,hh,rgb(lerpC([90,96,110],[226,230,236],L)),rgb(lerpC([60,66,80],[176,186,198],L)),rgb(lerpC([44,50,62],[140,150,166],L)));
+    else if(L<.6){ctx.fillStyle=`rgba(255,220,140,${.85*(1-L)})`; for(let k=1;k<hh-0.5;k+=1.4) if(rnd()>.35) ctx.fillRect(cx+ox-w/2+.4,cy+oy-k,.5,.5);}}
+}
+function drawPlant(p,L,now){
+  const [x,y]=p.xy, mw=mwOf(p,idx), u=p.cap?mw/p.cap:0, k=p.size, f=p.fuel;
+  if(f==='wind'){
+    const n=p.n||1, sp=4.2;
+    p.ang+= reduce?0:(0.02+0.35*u)*(1+0.05*Math.sin(now));
+    for(let i=0;i<n;i++){const gx=x+((i%3)-1)*sp+(Math.floor(i/3)%2)*sp*.5, gy=y+(Math.floor(i/3)-.5)*sp*.9;
+      if(p.sea){ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=.35; ctx.beginPath(); ctx.ellipse(gx,gy,1.2,.5,0,0,7); ctx.stroke();}
+      ctx.strokeStyle='#F4F6F8'; ctx.lineWidth=.55; ctx.beginPath(); ctx.moveTo(gx,gy); ctx.lineTo(gx,gy-6); ctx.stroke();
+      ctx.lineWidth=.5; for(let b=0;b<3;b++){const a=p.ang+i*.7+b*2.094; ctx.beginPath(); ctx.moveTo(gx,gy-6); ctx.lineTo(gx+Math.cos(a)*3.3,gy-6+Math.sin(a)*3.3); ctx.stroke();}
+      ctx.fillStyle=col.wind; ctx.beginPath(); ctx.arc(gx,gy-6,.55,0,7); ctx.fill();}
+    return;
+  }
+  if(f==='solar'){
+    const rows=p.roof?2:3, cols=p.roof?4:4, pw=p.roof?1.5:2.2, ph=p.roof?1:1.3, gap=.5;
+    const sx=x-(cols*(pw+gap))/2, sy=y-(rows*(ph+gap))/2;
+    for(let r=0;r<rows;r++)for(let c2=0;c2<cols;c2++){const px=sx+c2*(pw+gap)+(p.roof?((r+c2)%2)*1.2:0), py=sy+r*(ph+gap)+(p.roof?((c2*3)%2)*1.4:0);
+      ctx.fillStyle=rgb(lerpC([22,34,60],[38,74,140],L)); ctx.fillRect(px,py,pw,ph);
+      if(u>.05){ctx.fillStyle=`rgba(255,226,120,${Math.min(.9,u*1.1)*(.5+.5*Math.sin(now*2+r+c2))})`; ctx.fillRect(px,py,pw*.45,ph*.4);}}
+    if(p.roof){ctx.strokeStyle='rgba(255,226,120,.35)'; ctx.lineWidth=.3; ctx.setLineDash([.6,.6]); ctx.strokeRect(sx-1,sy-1,cols*(pw+gap)+2,rows*(ph+gap)+3); ctx.setLineDash([]);}
+    return;
+  }
+  if(f==='hydro'||f==='storage'){
+    ctx.fillStyle=rgb(lerpC([20,60,90],[70,160,210],L)); ctx.beginPath(); ctx.ellipse(x-1,y-2.6,k*.42,k*.22,-.2,0,7); ctx.fill();
+    ctx.fillStyle=rgb(lerpC([90,96,104],[205,208,212],L)); ctx.beginPath(); ctx.moveTo(x-k*.4,y-1); ctx.quadraticCurveTo(x,y+1.4,x+k*.4,y-1); ctx.lineTo(x+k*.35,y+.8); ctx.quadraticCurveTo(x,y+3,x-k*.35,y+.8); ctx.closePath(); ctx.fill();
+    if(u>.02){ctx.strokeStyle=`rgba(200,240,255,${.4+.5*u})`; ctx.lineWidth=.5; for(let i=-1;i<=1;i++){const o=((now*3+i)%1); ctx.beginPath(); ctx.moveTo(x+i*1.4,y+1.6); ctx.lineTo(x+i*1.4,y+2+o*2.5); ctx.stroke();}}
+    return;
+  }
+  if(f==='nuclear'){
+    box3(x,y,k*.7,1.6,k*.25,'#B9BCC2','#8F949C','#767B84');
+    ctx.fillStyle='#C9CCD2'; ctx.beginPath(); ctx.arc(x-.6,y-k*.25,k*.28,Math.PI,0); ctx.fill();
+    ctx.fillStyle='#6A6F78'; ctx.fillRect(x+k*.2,y-k*.6,1.6,1); ctx.fillStyle=col.crit; ctx.fillRect(x+k*.2,y-k*.6-.3,1.6,.3);
+    return;
+  }
+  // 火力（燃氣／燃煤）
+  const coal=f==='coal';
+  if(coal){ctx.fillStyle='#2E2A27'; ctx.beginPath(); ctx.ellipse(x-k*.45,y+.3,k*.25,k*.12,0,0,7); ctx.fill();}
+  box3(x,y,k*.62,k*.2,k*.3, coal?'#9C8E82':'#C9D6E6', coal?'#7B6C60':'#A8B9CF', coal?'#5F5248':'#8798B0');
+  if(!coal){ctx.fillStyle='#E8EEF5'; ctx.beginPath(); ctx.ellipse(x-k*.38,y-.2,k*.13,k*.08,0,0,7); ctx.fill(); ctx.fillRect(x-k*.51,y-k*.22,k*.26,k*.22); ctx.beginPath(); ctx.ellipse(x-k*.38,y-k*.22,k*.13,k*.08,0,0,7); ctx.fillStyle='#F6F9FC'; ctx.fill();}
+  const sh=coal?k*.95:k*.7, sx=x+k*.18;
+  ctx.fillStyle=coal?'#E9E4DE':'#DDE3EA'; ctx.fillRect(sx-.6,y-sh,1.2,sh);
+  if(coal){ctx.fillStyle='#C8483A'; for(let i=0;i<3;i++) ctx.fillRect(sx-.6,y-sh+i*1.6,1.2,.7);}
+  if(!coal){ctx.fillStyle='#DDE3EA'; ctx.fillRect(sx+1.4,y-sh*.8,.9,sh*.8);}
+  if(!p.cap){ctx.fillStyle='rgba(240,180,60,.9)'; ctx.fillRect(x-2.5,y-k*.3-2.2,5,1.4);}
+  p.top=[sx,y-sh];
+}
+/* ---------- 更新：煙、光點 ---------- */
+function step(dt){
+  const busy=parts.length<420;
+  P.forEach(p=>{const mw=mwOf(p,idx); if(!mw)return;
+    if((p.fuel==='coal'||p.fuel==='lng'||p.fuel==='oil')&&p.top){p.emit+=dt*(0.4+mw/700); while(p.emit>1){p.emit-=1; puffs.push({x:p.top[0],y:p.top[1],r:.7,a:p.fuel==='coal'?.55:.6,dark:p.fuel==='coal',vx:.8+Math.random()*.6,vy:-1.4-Math.random()});}}
+    if(busy){p.pe=(p.pe||0)+dt*mw/420; while(p.pe>1){p.pe-=1; spawn(p);}}
+  });
+  for(let i=puffs.length-1;i>=0;i--){const q=puffs[i]; q.x+=q.vx*dt*3; q.y+=q.vy*dt*3; q.r+=dt*1.4; q.a-=dt*.32; if(q.a<=0)puffs.splice(i,1);}
+  for(let i=parts.length-1;i>=0;i--){const q=parts[i]; q.t+=dt*q.v; if(q.t>=1)parts.splice(i,1);}
+}
+function spawn(p){
+  const same=C.filter(c=>c.name!=='澎湖'); let r=Math.random(), tgt=same[0];
+  // 6 成送到同區域城市，4 成依全台用電權重
+  const reg={北:['臺北','桃園','新竹','宜蘭'],中:['苗栗','臺中','彰化','南投','雲林'],南:['嘉義','臺南','高雄','屏東'],東:['花蓮','臺東','宜蘭']}[p.region];
+  const pool=(reg&&Math.random()<.6)?same.filter(c=>reg.includes(c.name)):same;
+  const tw=pool.reduce((s,c)=>s+c.w,0); r*=tw; for(const c of pool){r-=c.w; if(r<=0){tgt=c;break;}}
+  if(p.region==='離島') tgt=C.find(c=>c.name==='澎湖');
+  const a=[p.xy[0]+(Math.random()-.5)*3,p.xy[1]+(Math.random()-.5)*3], b=[tgt.xy[0]+(Math.random()-.5)*5,tgt.xy[1]+(Math.random()-.5)*4];
+  const dx=b[0]-a[0], dy=b[1]-a[1], len=Math.hypot(dx,dy)||1, bend=(Math.random()-.5)*.35*len;
+  parts.push({a,b,c:[(a[0]+b[0])/2-dy/len*bend,(a[1]+b[1])/2+dx/len*bend],t:0,v:Math.min(1.4,22/len)*(.7+Math.random()*.6),f:p.fuel});
+}
+/* ---------- 主迴圈 ---------- */
+function loop(ts){
+  if(!running) return;
+  const dt=Math.min(.05,(ts-(last||ts))/1000); last=ts;
+  if(playing){tAcc+=dt; if(tAcc>.12){tAcc=0; if(idx<D.stack.length-1){idx++; syncTime();} else {playing=false; playBtn();}}}
+  if(!reduce) step(dt);
+  draw(); requestAnimationFrame(loop);
+}
+function start(){if(running)return; running=true; last=0; readColors(); resize(); requestAnimationFrame(loop);}
+function stop(){running=false;}
+/* ---------- UI ---------- */
+const range=document.getElementById('t-range');
+function syncTime(){
+  range.max=D.stack.length-1; range.value=idx;
+  const s=stackAt(idx), h=s.h; document.getElementById('t-label').textContent=hhmm(h);
+  const load=loadAtH(hourOf(idx));
+  const tot=FUELS.reduce((a,f)=>a+Math.max(0,s[f.k]||0),0), re=RENEW.reduce((a,k)=>a+(s[k]||0),0);
+  document.getElementById('h-load').textContent=fmt(load); document.getElementById('h-re').textContent=(re/tot*100).toFixed(1)+'%';
+  const Lt=lightOf(D.supply.reserveRate,D.supply.reserveMW); const lamp=document.getElementById('h-lamp'); lamp.style.background=css(Lt.c); lamp.style.color=css(Lt.c);
+  document.getElementById('h-light').textContent='今日燈號：'+Lt.n;
+  info(); if(reduce) draw();
+}
+function playBtn(){const b=document.getElementById('t-play'); b.textContent=playing?'❚❚':'▶'; b.setAttribute('aria-label',playing?'暫停':'播放今日回放');}
+document.getElementById('t-play').addEventListener('click',()=>{if(!playing&&idx>=D.stack.length-1)idx=0; playing=!playing; playBtn(); syncTime();});
+range.addEventListener('input',()=>{idx=+range.value; playing=false; playBtn(); syncTime();});
+function info(){
+  const el2=document.getElementById('info');
+  if(!sel){el2.innerHTML=`<h3>點選島上的電廠或城市</h3><p>海上的白色風機是離岸風場，山區藍色湖泊是水力發電，西部沿海的煙囪是燃氣與燃煤電廠，灰色圓頂是已停機的核電廠。</p><p>光點代表電力從電廠送往城市，顏色對應能源種類。</p>`;return;}
+  const o=sel.o;
+  if(sel.t==='c'){const s=stackAt(idx), load=loadAtH(hourOf(idx));
+    el2.innerHTML=`<h3>${o.name}</h3><span class="tag">用電城市・${o.counties.join('、')}</span><div class="big">${fmt(load*o.w,0)}<em>萬瓩（估計目前用電）</em></div><p>${D.countyMonth}月用電 ${o.month.toFixed(1)} 億度，占全台 ${(o.w*100).toFixed(1)}%。目前用電依各縣市月用電比例推估。</p>`;return;}
+  const mw=mwOf(o,idx), u=o.cap?mw/o.cap:0;
+  el2.innerHTML=`<h3><i class="sw" style="background:var(${FCOL[o.fuel]});border-radius:50%"></i>${o.name}</h3>
+    <span class="tag">${FNAME[o.fuel]}${o.sea?'・離岸':o.fuel==='wind'?'・陸域':''}${o.roof?'・分散式':''}・${o.region}${o.region==='離島'?'':'部'}</span>
+    <div class="big">${fmt(mw)}<em>MW　／ 裝置容量 ${fmt(o.cap)} MW</em></div>
+    <div class="meter"><i style="width:${(u*100).toFixed(1)}%;background:var(${FCOL[o.fuel]})"></i></div>
+    <p>${o.cap?`出力約為裝置容量的 ${(u*100).toFixed(0)}%。`:''}${o._pump>0?`目前正在抽水，用電 ${fmt(o._pump)} MW。`:''}${o.note||''}${o.roof?'代表該區域眾多屋頂與小型案場的合計。':''}</p>
+    <p style="font-size:12px">${D.sample?`${hhmm(hourOf(idx))} 的示意值，依當時全台${FNAME[o.fuel]}發電量分配。`:idx<D.stack.length-1?`${hhmm(hourOf(idx))} 的推估值：以現在的機組出力，按當時全台${FNAME[o.fuel]}發電量比例換算。`:o._src==='unit'?`台電各機組即時發電量合計（${D.unitsAt||D.asOf}）。`:o._src==='pool'?'未單獨列出的太陽能（約占全台八成以上）依各區域比例分配，屬推估。':'依全台比例推估。'}</p>`;
+}
+function hit(sx,sy){
+  let best=null,bd=1e9;
+  P.forEach(p=>{const [x,y]=toS(p.xy[0],p.xy[1]-(p.fuel==='wind'?4:2)); const d=Math.hypot(x-sx,y-sy); if(d<Math.max(16,p.size*sc()*.7)&&d<bd){bd=d;best={t:'p',o:p};}});
+  C.forEach(c=>{const [x,y]=toS(c.xy[0],c.xy[1]-3); const d=Math.hypot(x-sx,y-sy); if(d<18&&d<bd){bd=d;best={t:'c',o:c};}});
+  return best;
+}
+// 指標：拖曳、點選、雙指縮放
+const ptrs=new Map(); let drag=null, pinch=null;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[e.offsetX,e.offsetY]);
+  if(ptrs.size===1) drag={x:e.offsetX,y:e.offsetY,cx:cam.x,cy:cam.y,moved:false};
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()]; pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:cam.z}; drag=null;}});
+cv.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return; ptrs.set(e.pointerId,[e.offsetX,e.offsetY]);
+  if(pinch&&ptrs.size===2){const [a,b]=[...ptrs.values()]; cam.z=pinch.z*Math.hypot(a[0]-b[0],a[1]-b[1])/pinch.d; clampCam(); if(reduce)draw(); return;}
+  if(drag){const dx=e.offsetX-drag.x, dy=e.offsetY-drag.y; if(Math.hypot(dx,dy)>5)drag.moved=true; if(drag.moved){cam.x=drag.cx-dx/sc(); cam.y=drag.cy-dy/sc(); clampCam(); if(reduce)draw();}}});
+const up=e=>{if(drag&&!drag.moved&&ptrs.size===1){sel=hit(e.offsetX,e.offsetY); info(); if(reduce)draw();} ptrs.delete(e.pointerId); if(ptrs.size<2)pinch=null; if(!ptrs.size)drag=null;};
+cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);drag=null;pinch=null;});
+cv.addEventListener('wheel',e=>{e.preventDefault(); const [wx,wy]=toW(e.offsetX,e.offsetY); cam.z*=e.deltaY<0?1.15:1/1.15; clampCam(); const [nx,ny]=toW(e.offsetX,e.offsetY); cam.x+=wx-nx; cam.y+=wy-ny; clampCam(); if(reduce)draw();},{passive:false});
+const zoomBy=f=>{cam.z*=f; clampCam(); if(reduce)draw();};
+document.getElementById('z-in').addEventListener('click',()=>zoomBy(1.4));
+document.getElementById('z-out').addEventListener('click',()=>zoomBy(1/1.4));
+document.getElementById('z-reset').addEventListener('click',()=>{cam={x:W/2,y:H/2,z:1}; clampCam(); if(reduce)draw();});
+window.addEventListener('resize',()=>{if(running)resize();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stop(); else if(!document.getElementById('view-island').hidden)start();});
+/* 篩選與圖例 */
+const FK=['lng','coal','oil','nuclear','hydro','storage','wind','solar'];
+function chips(){
+  const fc=document.getElementById('fchips');
+  fc.innerHTML=`<button type="button" aria-pressed="${!filter}" data-f="">全部</button>`+FK.map(k=>`<button type="button" aria-pressed="${filter===k}" data-f="${k}" style="--c:var(${FCOL[k]})"><i></i>${FNAME[k]}</button>`).join('');
+  fc.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.f||null; chips(); if(reduce)draw();}));
+}
+document.getElementById('keylist').innerHTML=[
+  ['離岸／陸域風機','<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 15V7M8 7l5-3M8 7l-5-3M8 7v-6" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>'],
+  ['燃氣電廠（白色蒸氣）','<svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="8" width="9" height="6" fill="var(--f-lng)"/><rect x="11" y="3" width="2" height="11" fill="currentColor"/></svg>'],
+  ['燃煤電廠（灰煙・紅白煙囪）','<svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="8" width="9" height="6" fill="var(--f-coal)"/><rect x="11" y="1" width="2" height="13" fill="var(--crit)"/></svg>'],
+  ['水力（水庫與壩）','<svg width="16" height="16" viewBox="0 0 16 16"><ellipse cx="8" cy="6" rx="6" ry="3" fill="var(--f-hydro)"/><path d="M2 10q6 3 12 0v2q-6 3-12 0z" fill="currentColor"/></svg>'],
+  ['太陽能案場／屋頂光電','<svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="5" width="6" height="3" fill="var(--f-solar)"/><rect x="9" y="5" width="6" height="3" fill="var(--f-solar)"/><rect x="1" y="10" width="6" height="3" fill="var(--f-solar)"/><rect x="9" y="10" width="6" height="3" fill="var(--f-solar)"/></svg>'],
+  ['核電廠（已停機）','<svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 12a5 5 0 0 1 10 0z" fill="currentColor" opacity=".55"/><rect x="2" y="12" width="12" height="2" fill="currentColor"/></svg>'],
+  ['城市（亮度＝用電量）','<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="9" r="6" fill="#F2B94F" opacity=".35"/><rect x="5" y="5" width="2" height="7" fill="currentColor"/><rect x="8" y="3" width="3" height="9" fill="currentColor"/></svg>'],
+  ['電力光點（顏色＝能源）','<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="3" cy="11" r="1.6" fill="var(--f-wind)"/><circle cx="8" cy="8" r="1.6" fill="var(--f-lng)"/><circle cx="13" cy="5" r="1.6" fill="var(--f-solar)"/></svg>']
+].map(([t,i])=>`<span>${i}${t}</span>`).join('');
+
+/* 模式切換 */
+function setMode(m){
+  const isl=m==='island';
+  document.getElementById('view-dash').hidden=isl; document.getElementById('view-island').hidden=!isl;
+  document.querySelectorAll('.modes button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===m));
+  try{localStorage.setItem('tp-mode',m);}catch(e){}
+  if(isl){ if(!D) return; cityW(); idx=D.stack.length-1; chips(); syncTime(); start(); } else stop();
+}
+window.__setMode=setMode;
+document.querySelectorAll('.modes button').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+window.__islandReady=()=>{let m='dash'; if(location.hash==='#island')m='island'; else {try{m=localStorage.getItem('tp-mode')||'dash';}catch(e){}} setMode(m);};
+window.__islandRefresh=()=>{if(!running)return; const atEnd=true; cityW(); idx=D.stack.length-1; syncTime();};
+window.__islandTheme=()=>{if(running){readColors(); syncTime();}};
+})();
+</script>
+
+</body>
+</html>
