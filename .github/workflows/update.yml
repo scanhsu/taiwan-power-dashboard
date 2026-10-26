@@ -31,6 +31,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: 取回上次的資料（今日曲線、最新資料）
+        # 開放資料只有「當下」的數字，今日曲線是每次執行累積的；
+        # 上次的結果就放在已發布的網站上，這裡把它抓回來接著寫。第一次執行抓不到是正常的。
+        run: |
+          mkdir -p data
+          BASE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/data"
+          for f in today.json latest.json; do
+            curl -fsS -m 30 "$BASE_URL/$f?t=$(date +%s)" -o "data/$f" || rm -f "data/$f"
+          done
+          ls -la data
+        continue-on-error: true
+
       - name: 抓取台電資料
         run: python scripts/update_data.py
         continue-on-error: true
