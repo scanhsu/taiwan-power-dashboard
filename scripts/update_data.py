@@ -26,7 +26,7 @@ OPEN = "https://service.taipower.com.tw/data/opendata/apply/file/"
 TZ = dt.timezone(dt.timedelta(hours=8))
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATA = os.path.join(ROOT, "data")
-UA = "Mozilla/5.0 (compatible; taiwan-power-dashboard; +https://github.com/)"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 errors = []
 
@@ -41,7 +41,14 @@ def fetch(url, tries=3):
     for i in range(tries):
         try:
             sep = "&" if "?" in url else "?"
-            req = urllib.request.Request(f"{url}{sep}t={int(time.time())}", headers={"User-Agent": UA})
+            req = urllib.request.Request(f"{url}{sep}t={int(time.time())}", headers={
+                "User-Agent": UA,
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+                "Referer": "https://www.taipower.com.tw/tc/page.aspx?mid=206",
+                "Origin": "https://www.taipower.com.tw",
+                "Cache-Control": "no-cache",
+            })
             with urllib.request.urlopen(req, timeout=40) as r:
                 raw = r.read()
             for enc in ("utf-8-sig", "big5", "cp950"):
