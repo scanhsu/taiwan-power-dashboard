@@ -2,7 +2,7 @@ name: 更新台電資料並發布網站
 
 on:
   schedule:
-    - cron: "1,11,21,31,41,51 * * * *"   # 約每 10 分鐘；避開整點與整十分鐘，GitHub 在那些時間很忙、排程常被延遲或略過
+    - cron: "7,17,27,37,47,57 * * * *"   # 約每 10 分鐘；避開整點與整十分鐘，GitHub 在那些時間很忙、排程常被延遲或略過
   workflow_dispatch:          # 可以在 Actions 頁面手動按「Run workflow」
   push:
     branches: [main]          # 上傳或修改檔案後也會立刻更新一次
@@ -48,14 +48,26 @@ jobs:
         continue-on-error: true
 
       - name: 保存需要累積的歷史資料
+        # 上傳時如果儲存庫剛好有別的更新（被 GitHub 回「fetch first」），就先合併再重試。
+        # 即使保存失敗也不影響下面的「發布網站」，網頁照常更新。
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/history.json data/counties.json 2>/dev/null || true
           if ! git diff --cached --quiet; then
             git commit -m "更新歷史資料 $(TZ=Asia/Taipei date '+%F %H:%M')"
-            git push
+            for i in 1 2 3 4; do
+              if git pull --rebase -X theirs -q origin main && git push -q origin main; then
+                echo "已保存（第 $i 次嘗試）"
+                exit 0
+              fi
+              echo "上傳被拒絕，等幾秒後重試（$i/4）"
+              git rebase --abort 2>/dev/null || true
+              sleep $((i * 4))
+            done
+            echo "::warning::歷史資料這次沒能保存，下次執行會再試；網站仍會照常更新。"
           fi
+        continue-on-error: true
 
       - name: 設定 GitHub Pages
         uses: actions/configure-pages@v5
